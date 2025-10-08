@@ -1,0 +1,24 @@
+start: '2025-01-01 00:00'
+periods: 288  # number of periods (with 5‑minute freq this equals one day)
+freq: '5min'
+seed: 42
+loss_rate: 0.0
+noise:
+  source:
+    sigma_abs: 0.0
+    sigma_rel: 0.0
+  consumer:
+    sigma_abs: 0.0
+    sigma_rel: 0.1
+profiles:
+  num_harmonics: 2
+  # day‑of‑week multipliers. Keys are strings for YAML compatibility.
+  dow_factors:
+    '0': 1.0  # Monday
+    '1': 1.0  # Tuesday
+    '2': 1.0  # Wednesday
+    '3': 1.0  # Thursday
+    '4': 1.0  # Friday
+    '5': 1.0  # Saturday
+    '6': 1.0  # Sunday
+  season_strength: 0.0
