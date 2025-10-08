@@ -34,14 +34,32 @@ def main() -> None:
     parser.add_argument("--topology", default=str(base_dir / "data" / "network_topology.json"), help="Path to network topology JSON")
     parser.add_argument("--config", default=str(base_dir / "config.yml"), help="Path to configuration YAML")
     parser.add_argument("--events", default=None, help="Path to events CSV/YAML (optional)")
+    parser.add_argument(
+        "--interactive",
+        action="store_true",
+        help="Launch the interactive network viewer with a time slider",
+    )
     args = parser.parse_args()
     result = simulate(args.topology, args.config, args.events, out_dir=None)
     fig = result.get("figure")
-    if fig is not None:
+    if fig is not None and not args.interactive:
         fig.show()
     network_fig = result.get("network_figure")
-    if network_fig is not None:
+    if network_fig is not None and not args.interactive:
         network_fig.show()
+    if args.interactive:
+        try:
+            from .interactive_network import build_interactive_network_figure
+        except Exception:  # pragma: no cover - fallback for script execution
+            from interactive_network import build_interactive_network_figure  # type: ignore
+
+        graph_obj = result.get("graph")
+        meters_df = result.get("meters_df")
+        edges_df = result.get("edges_df")
+        if graph_obj is None or meters_df is None or edges_df is None:
+            raise RuntimeError("Simulation did not return graph and flow data for visualisation.")
+        interactive_fig = build_interactive_network_figure(graph_obj, edges_df, meters_df)
+        interactive_fig.show()
 
 
 if __name__ == "__main__":

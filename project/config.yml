@@ -12,7 +12,7 @@ noise:
     sigma_rel: 0.1
 profiles:
   num_harmonics: 2
-  # day‑of‑week multipliers. Keys are strings for YAML compatibility.
+  # day-of-week multipliers. Keys are strings for YAML compatibility.
   dow_factors:
     '0': 1.0  # Monday
     '1': 1.0  # Tuesday

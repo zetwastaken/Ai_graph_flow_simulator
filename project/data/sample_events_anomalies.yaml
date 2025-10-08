@@ -1,0 +1,24 @@
+- id: ev_offset_1
+  type: offset
+  ts_start: 2025-01-01 01:15:00
+  duration: 20
+  target_kind: meter
+  target_id: meter_c1
+  magnitude: 2.0
+  mode: add
+- id: ev_leak_1
+  type: leak
+  ts_start: 2025-01-01 03:00:00
+  duration: 30
+  target_kind: edge
+  target_id: e2
+  magnitude: 5.5
+  mode: const
+- id: ev_offset_2
+  type: offset
+  ts_start: 2025-01-01 06:45:00
+  duration: 15
+  target_kind: meter
+  target_id: meter_c2
+  magnitude: -1.5
+  mode: add

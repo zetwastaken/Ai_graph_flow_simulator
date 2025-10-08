@@ -19,6 +19,27 @@ python -m project.cli simulate \
   --config project/config.yml
 ```
 
+### Additional topologies and configurations
+
+The repository now bundles a small library of ready-to-use presets so you
+can explore different network shapes and demand assumptions without
+authoring JSON/YAML from scratch:
+
+* **Topologies** live under `project/data/topologies/` and include a
+  grid, linear trunk, and ring-style distribution layout.
+* **Configuration presets** live under `project/configs/` and cover use
+  cases such as high-variability demand, leak studies with low noise, and
+  weekend-biased consumption.
+
+Use any combination by pointing the CLI or GUI to the desired files, for
+example:
+
+```bash
+python -m project.cli simulate \
+  --topology project/data/topologies/network_topology_ring.json \
+  --config project/configs/weekend_peaks.yml
+```
+
 To store the generated meter readings, edge flows, event labels and
 time‑series plot to a directory (e.g. `out/`), provide the `--out`
 parameter:
@@ -29,6 +50,16 @@ python -m project.cli simulate \
   --config project/config.yml \
   --out out
 ```
+
+For an interactive network view with a timestamp slider, run the dashboard
+helper with the `--interactive` flag:
+
+```bash
+python -m project.viz.dashboard --interactive
+```
+
+This launches a Plotly figure that animates true flows along every edge
+and the measured (read) flow at each consumer meter across time.
 
 The simulator reads its inputs from YAML/JSON files and produces
 CSV files with a `.parquet` extension for compatibility with the
@@ -49,8 +80,16 @@ original specification.  The high‑level workflow is described in
 ```
 project/
   config.yml                  # Sample simulator configuration
+  configs/                    # Additional ready-to-run configuration presets
+    high_variability.yml
+    leak_study.yml
+    weekend_peaks.yml
   data/
-    network_topology.json     # Sample network with one source and two consumers
+    network_topology.json     # Default multi-source distribution network
+    topologies/               # Extra topologies for experimentation
+      network_topology_grid.json
+      network_topology_linear.json
+      network_topology_ring.json
   sim/
     generator.py              # Core implementation of the data generator
     anomalies.py              # (placeholder) future event injection logic
@@ -61,6 +100,7 @@ project/
   evaluation/                 # (placeholder) future performance metrics
   viz/
     dashboard.py              # CLI for running a simulation and plotting results
+    interactive_network.py    # Plotly helper for interactive network visualisation
   cli.py                      # Command line entrypoint for the simulator
   tests/
     test_network.py           # Unit tests for graph loading and routing
@@ -93,6 +133,12 @@ A *leak* on an edge increases the flow measured at upstream sources but
 does not affect any consumer meter, thereby increasing the net inflow.
 A *meter offset* event biases the measured flow of a specific meter
 without changing the true flow.
+
+For quick experiments the repository includes ready‑made examples in
+`project/data/sample_events_leaks.csv` (multiple leak events) and
+`project/data/sample_events_anomalies.yaml` (a mix of leak and meter offset
+anomalies).  These files can be referenced via the `--events` argument when
+running the simulator CLI or the dashboard utility.
 
 ## Running tests
 

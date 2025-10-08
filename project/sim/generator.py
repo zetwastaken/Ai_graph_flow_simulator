@@ -4,9 +4,9 @@ This module implements a basic synthetic data generator for a network of
 sources and consumers connected via directed edges.  It allows the user to
 simulate realistic consumption profiles, compute flows on sources and edges,
 inject simple anomalies such as leaks and meter offsets, and apply
-measurement noise.  The implementation avoids external graph libraries by
-maintaining its own adjacency representation and using Dijkstra's
-algorithm for shortest‐path routing.
+measurement noise.  The topology is represented with :mod:`networkx`
+directed graphs, giving access to robust shortest-path routines while
+keeping the remainder of the simulation pipeline lightweight.
 
 Functions are designed to be pure and deterministic when provided with a
 random number generator instance and a fixed seed.  All time series are
