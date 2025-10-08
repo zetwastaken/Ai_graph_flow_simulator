@@ -155,7 +155,10 @@ def force_directed_layout(
     min_distance: float = 50.0,
     edge_separation: Optional[float] = None,
 ) -> Dict[str, Tuple[float, float]]:
-    """Compute a force-directed layout similar to Obsidian's relaxed graph view."""
+    """Compute a Fruchterman–Reingold force-directed layout.
+
+    Based on the formulation from https://en.wikipedia.org/wiki/Force-directed_graph_drawing.
+    """
 
     nodes = list(G.nodes.keys())
     n = len(nodes)
@@ -164,7 +167,12 @@ def force_directed_layout(
 
     index = {node_id: idx for idx, node_id in enumerate(nodes)}
     rng = np.random.default_rng(seed)
-    positions = rng.normal(scale=1.0, size=(n, 2))
+
+    base_area = max(area, 1e-6)
+    k = math.sqrt(base_area / n)
+    if edge_separation is not None and edge_separation > 0:
+        k = float(edge_separation)
+    positions = rng.uniform(-1.0, 1.0, size=(n, 2)) * k
 
     # Treat the graph as undirected for layout purposes
     unique_edges: Set[Tuple[int, int]] = set()
@@ -176,8 +184,8 @@ def force_directed_layout(
         ordered = (min(u_idx, v_idx), max(u_idx, v_idx))
         unique_edges.add(ordered)
 
-    k = math.sqrt(area / n)
-    temperature = math.sqrt(area)
+    temperature = math.sqrt(base_area)
+    min_distance = max(min_distance, 1e-9)
 
     for _ in range(iterations):
         disp = np.zeros((n, 2), dtype=float)
@@ -185,78 +193,48 @@ def force_directed_layout(
         # Repulsive forces
         for i in range(n):
             delta = positions[i] - positions
-            distances = np.linalg.norm(delta, axis=1) + 1e-9
-            # Ignore self interaction
-            distances[i] = 1.0
-            repulsive = (k * k / distances[:, None]) * (delta / distances[:, None])
-            repulsive[i] = 0.0
+            distances = np.linalg.norm(delta, axis=1)
+            distances[i] = 1.0  # ignore self interaction
+            zero_mask = distances < 1e-9
+            distances[zero_mask] = min_distance
+            inv_dist = 1.0 / distances
+            inv_dist[i] = 0.0
+            repulsive = delta * ((k * k) * (inv_dist ** 2))[:, None]
             disp[i] += repulsive.sum(axis=0)
 
         # Attractive forces
         for u_idx, v_idx in unique_edges:
             delta = positions[u_idx] - positions[v_idx]
-            dist = np.linalg.norm(delta) + 1e-9
-            attractive_force = (dist * dist / k) * (delta / dist)
-            disp[u_idx] -= attractive_force
-            disp[v_idx] += attractive_force
+            dist = np.linalg.norm(delta)
+            if dist < 1e-9:
+                direction = rng.uniform(-1.0, 1.0, size=2)
+                norm = np.linalg.norm(direction) or 1.0
+                direction /= norm
+                dist = min_distance
+            else:
+                direction = delta / dist
+            force = (dist * dist) / k
+            attractive = direction * force
+            disp[u_idx] -= attractive
+            disp[v_idx] += attractive
 
         # Update positions with cooling
-        for i in range(n):
-            norm = np.linalg.norm(disp[i])
-            if norm > 0:
-                step = (disp[i] / norm) * min(norm, temperature)
-            else:
-                step = 0.0
-            positions[i] += step
+        disp_norm = np.linalg.norm(disp, axis=1)
+        move_mask = disp_norm > 0
+        if np.any(move_mask):
+            limited = np.minimum(disp_norm[move_mask], temperature)
+            positions[move_mask] += (disp[move_mask] / disp_norm[move_mask][:, None]) * limited[:, None]
 
         temperature *= cooling
-        if temperature < 1e-3:
+        if temperature < 1e-4:
             break
 
     # Recentre layout
     positions -= positions.mean(axis=0)
 
     # Optional scaling for readability
-    positions *= spread
-
-    min_distance = max(min_distance, 0.0)
-    desired_edge_sep = edge_separation
-    if desired_edge_sep is None:
-        desired_edge_sep = max(min_distance * 1.5, spread * 0.75)
-
-    if min_distance > 0 or desired_edge_sep > 0:
-        # Lightweight post adjustment to keep nodes and connected edges apart
-        for _ in range(40):
-            moved = False
-            if min_distance > 0:
-                for i in range(n):
-                    for j in range(i + 1, n):
-                        delta = positions[i] - positions[j]
-                        dist = np.linalg.norm(delta)
-                        if dist < 1e-6:
-                            delta = rng.normal(scale=0.1, size=2)
-                            dist = np.linalg.norm(delta)
-                        if dist < min_distance:
-                            push = (min_distance - dist) / dist * 0.5
-                            move = delta * push
-                            positions[i] += move
-                            positions[j] -= move
-                            moved = True
-            if desired_edge_sep > 0:
-                for u_idx, v_idx in unique_edges:
-                    delta = positions[u_idx] - positions[v_idx]
-                    dist = np.linalg.norm(delta)
-                    if dist < 1e-6:
-                        delta = rng.normal(scale=0.1, size=2)
-                        dist = np.linalg.norm(delta)
-                    if dist < desired_edge_sep:
-                        push = (desired_edge_sep - dist) / dist * 0.5
-                        move = delta * push
-                        positions[u_idx] += move
-                        positions[v_idx] -= move
-                        moved = True
-            if not moved:
-                break
+    scale = spread / k if k > 1e-9 else spread
+    positions *= scale
 
     return {node_id: tuple(positions[index[node_id]]) for node_id in nodes}
 
@@ -335,6 +313,7 @@ def assign_routes(G: Graph) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[s
     routes: Dict[str, Dict[str, Any]] = {}
     edge_to_consumers: Dict[str, List[str]] = {eid: [] for eid in G.edges}
     edge_to_sources: Dict[str, List[str]] = {eid: [] for eid in G.edges}
+    layout_positions = force_directed_layout(G, seed=0) or {}
 
     # Precompute shortest paths from all nodes to all sources on reversed graph
     # For each consumer, run Dijkstra on the reversed graph to find nearest source.
@@ -342,15 +321,46 @@ def assign_routes(G: Graph) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, List[s
         # Distances from consumer to all nodes on reversed graph
         dist_rev, prev_rev = G.dijkstra_reverse(consumer)
         # Choose the source with minimum distance
-        nearest_source = None
-        nearest_dist = math.inf
+        candidate_distances: List[Tuple[str, float]] = []
         for s in sources:
             d = dist_rev.get(s, math.inf)
-            if d < nearest_dist:
-                nearest_dist = d
-                nearest_source = s
-        if nearest_source is None or nearest_dist == math.inf:
+            if math.isfinite(d):
+                candidate_distances.append((s, d))
+        if not candidate_distances:
             raise RuntimeError(f"Consumer {consumer} is unreachable from any source")
+        candidate_distances.sort(key=lambda item: item[1])
+        nearest_dist = candidate_distances[0][1]
+        # Treat sources within tolerance as equivalent so a single feeder
+        # does not capture the whole network due to tiny numerical deltas.
+        rel_tol = 1e-6
+        abs_tol = 1e-9
+        candidate_sources = [
+            sid
+            for sid, dist in candidate_distances
+            if math.isclose(dist, nearest_dist, rel_tol=rel_tol, abs_tol=abs_tol)
+        ]
+        if not candidate_sources:
+            candidate_sources = [candidate_distances[0][0]]
+
+        if len(candidate_sources) > 1:
+            consumer_pos = layout_positions.get(consumer)
+            if consumer_pos is not None:
+                cx, cy = consumer_pos
+
+                def layout_distance_sq(source_id: str) -> float:
+                    pos = layout_positions.get(source_id)
+                    if pos is None:
+                        return math.inf
+                    sx, sy = pos
+                    dx = cx - sx
+                    dy = cy - sy
+                    return dx * dx + dy * dy
+
+                candidate_sources.sort(key=lambda sid: (layout_distance_sq(sid), sid))
+            else:
+                candidate_sources.sort()
+
+        nearest_source = candidate_sources[0]
         # Reconstruct path on forward graph from source to consumer
         # We run Dijkstra from the source to produce predecessor mapping
         dist_fwd, prev_fwd = G.dijkstra(nearest_source)
@@ -837,230 +847,135 @@ def plot_network_overview(
     edges_df: pd.DataFrame,
     labels_df: Optional[pd.DataFrame] = None,
 ) -> Any:
-    """Visualise the network topology with flow magnitudes and detected anomalies.
-
-    Nodes are positioned in hierarchical layers (sources at the top, consumers lower)
-    with point size proportional to their average measured flow.  Anomalous nodes and
-    edges are highlighted based on ``labels_df`` entries.
-    """
+    """Render a force-directed network overview highlighting cumulative flows."""
 
     import matplotlib.pyplot as plt
+    from matplotlib.patches import FancyArrowPatch, Patch
     from matplotlib.lines import Line2D
-    from matplotlib.patches import Patch
 
-    from collections import defaultdict
+    def format_value(value: float) -> str:
+        abs_val = abs(value)
+        if abs_val >= 1_000_000:
+            return f"{value/1_000_000:.1f}M"
+        if abs_val >= 1_000:
+            return f"{value/1_000:.1f}k"
+        if abs_val >= 100:
+            return f"{value:.1f}"
+        if abs_val >= 1:
+            return f"{value:.2f}"
+        return f"{value:.3f}"
 
-    node_kind = {node.id: node.type for node in G.nodes.values()}
+    positions = force_directed_layout(
+        G,
+        area=360000.0,
+        spread=24.0,
+        min_distance=12.0,
+        edge_separation=18.0,
+        seed=7,
+    )
+    if not positions:
+        fig, ax = plt.subplots(figsize=(10, 6))
+        ax.text(0.5, 0.5, "No topology available", ha="center", va="center", fontsize=12)
+        ax.axis("off")
+        fig.tight_layout()
+        return fig
+
+    edge_true_total = (
+        edges_df.groupby("edge_id")["true_flow"].sum().to_dict() if not edges_df.empty else {}
+    )
+    monitoring_columns = {"true_flow", "measured_flow"}
+    if meters_df.empty:
+        meter_totals = pd.DataFrame(columns=["node_id", "metric", "value"])
+    else:
+        meter_totals = (
+            meters_df.groupby(["node_id"])
+            .agg({col: "sum" for col in monitoring_columns if col in meters_df.columns})
+            .rename(columns={"true_flow": "true_total", "measured_flow": "measured_total"})
+        )
+    true_per_node = meter_totals.get("true_total", pd.Series(dtype=float)).to_dict()
+    measured_per_node = meter_totals.get("measured_total", pd.Series(dtype=float)).to_dict()
+
+    kind_per_node = {node.id: node.type for node in G.nodes.values()}
     meter_lookup = {node.meter_id: node.id for node in G.nodes.values() if node.meter_id}
 
-    node_flow = (
-        meters_df.groupby("node_id")["measured_flow"].mean().abs().to_dict()
-        if not meters_df.empty
-        else {}
-    )
-    meter_flow = (
-        meters_df.groupby("meter_id")["measured_flow"].mean().abs().to_dict()
-        if not meters_df.empty
-        else {}
-    )
-    edge_flow = (
-        edges_df.groupby("edge_id")["true_flow"].mean().abs().to_dict()
-        if not edges_df.empty
-        else {}
-    )
-    edge_true_sum = (
-        edges_df.groupby("edge_id")["true_flow"].sum().abs().to_dict()
-        if not edges_df.empty
-        else {}
-    )
-
-    edge_measured_sum: Dict[str, float] = {}
-    if not meters_df.empty:
-        consumer_measure_sum = (
-            meters_df[meters_df["kind"] == "consumer"]
-            .groupby("node_id")["measured_flow"]
-            .sum()
-        )
-        try:
-            _, edge_to_consumers, _ = assign_routes(G)
-        except Exception:
-            edge_to_consumers = {eid: [] for eid in G.edges}
-        for eid, consumers in edge_to_consumers.items():
-            if not consumers:
-                edge_measured_sum[eid] = 0.0
-                continue
-            total = float(consumer_measure_sum.reindex(consumers).fillna(0.0).sum())
-            edge_measured_sum[eid] = total
-    else:
-        edge_measured_sum = {eid: 0.0 for eid in G.edges}
-
-    node_anomalies: Dict[str, Set[str]] = defaultdict(set)
-    edge_anomalies: Dict[str, Set[str]] = defaultdict(set)
-    if labels_df is not None and not labels_df.empty:
+    def extract_anomalies() -> Tuple[Dict[str, Set[str]], Dict[str, Set[str]]]:
+        node_anomalies: Dict[str, Set[str]] = {}
+        edge_anomalies: Dict[str, Set[str]] = {}
+        if labels_df is None or labels_df.empty:
+            return node_anomalies, edge_anomalies
         for event in labels_df.itertuples(index=False):
             etype = getattr(event, "type", "anomaly")
             target_kind = getattr(event, "target_kind", "")
             target_id = getattr(event, "target_id", "")
             if target_kind in ("meter", "source", "consumer"):
                 node_id = meter_lookup.get(target_id, target_id if target_id in G.nodes else None)
-                if node_id:
-                    node_anomalies[node_id].add(etype)
-            elif target_kind == "edge":
-                edge_anomalies[target_id].add(etype)
-
-    node_count = len(G.nodes)
-    crowding_bonus = max(0, node_count - 8)
-    density_scale = 1.0 + crowding_bonus / 6.0
-    target_area = max(120000.0, 380.0 * node_count * node_count * density_scale)
-    spread = 5.8 + 0.75 * math.log1p(crowding_bonus + 1.0)
-    minimum_spacing = 2.2 + 0.14 * math.log1p(crowding_bonus + 1.0)
-    edge_goal = max(minimum_spacing * 1.8, spread * 1.4)
-    positions = force_directed_layout(
-        G,
-        area=target_area,
-        spread=spread,
-        min_distance=minimum_spacing,
-        edge_separation=edge_goal,
-        seed=0,
-    )
-
-    if not positions:
-        fig, ax = plt.subplots(figsize=(8, 4))
-        ax.text(0.5, 0.5, "No topology available", ha="center", va="center", fontsize=12)
-        ax.axis("off")
-        fig.tight_layout()
-        return fig
-
-    base_stretch = 1.9 + 0.06 * crowding_bonus
-    planed_stretch = base_stretch * 4.0
-    stretch_factor = max(planed_stretch, 5.0)
-    if stretch_factor != 1.0:
-        positions = {nid: (xy[0] * stretch_factor, xy[1] * stretch_factor) for nid, xy in positions.items()}
-
-    node_coords = np.array(list(positions.values()), dtype=float)
-    label_positions: List[np.ndarray] = []
-    label_rng = np.random.default_rng(0)
-
-    def reserve_label_position(
-        x: float,
-        y: float,
-        *,
-        min_dist: float = 1.4,
-        node_clearance: float = 1.0,
-        anchor: Optional[Tuple[float, float]] = None,
-    ) -> Tuple[float, float]:
-        """Push a label position away from nearby labels and nodes."""
-
-        pos = np.array([x, y], dtype=float)
-        anchor_array = None if anchor is None else np.array(anchor, dtype=float)
-        if node_coords.size == 0:
-            node_array = np.empty((0, 2), dtype=float)
-        else:
-            node_array = node_coords
-        for _ in range(40):
-            adjustment = np.zeros(2, dtype=float)
-            for node_xy in node_array:
-                if anchor_array is not None and np.linalg.norm(node_xy - anchor_array) < 1e-8:
+                if node_id is None:
                     continue
-                delta = pos - node_xy
-                dist = np.linalg.norm(delta)
-                if dist < node_clearance:
-                    if dist < 1e-8:
-                        delta = label_rng.normal(scale=0.05, size=2)
-                        dist = np.linalg.norm(delta)
-                    adjustment += (node_clearance - dist) * (delta / dist)
-            for other in label_positions:
-                delta = pos - other
-                dist = np.linalg.norm(delta)
-                if dist < min_dist:
-                    if dist < 1e-8:
-                        delta = label_rng.normal(scale=0.05, size=2)
-                        dist = np.linalg.norm(delta)
-                    adjustment += (min_dist - dist) * (delta / dist)
-            shift_norm = np.linalg.norm(adjustment)
-            if shift_norm < 1e-3:
-                break
-            pos += adjustment * 0.5
-        label_positions.append(pos.copy())
-        return float(pos[0]), float(pos[1])
+                node_anomalies.setdefault(node_id, set()).add(etype)
+            elif target_kind == "edge":
+                edge_anomalies.setdefault(target_id, set()).add(etype)
+        return node_anomalies, edge_anomalies
 
-    type_colors = {
-        "source": "#f4b942",
-        "consumer": "#ffa69e",
-        "junction": "#c9d6df",
+    node_anomalies, edge_anomalies = extract_anomalies()
+
+    max_edge_total = max(abs(v) for v in edge_true_total.values()) if edge_true_total else 1.0
+    true_totals_only = [abs(v) for v in true_per_node.values()]
+    max_node_total = max(true_totals_only) if true_totals_only else 1.0
+
+    fig, ax = plt.subplots(figsize=(18, 11))
+    ax.set_title("Force-directed Network Overview (total flows)")
+
+    base_edge_color = "#4a6fa5"
+    anomaly_edge_color = "#d1495b"
+    base_node_colors = {
+        "source": "#ffd166",
+        "consumer": "#06d6a0",
+        "junction": "#adb5bd",
     }
 
-    def format_value(value: float) -> str:
-        abs_val = abs(value)
-        if abs_val >= 1000:
-            return f"{value:,.0f}"
-        if abs_val >= 100:
-            return f"{value:,.1f}"
-        if abs_val >= 1:
-            return f"{value:,.2f}"
-        return f"{value:,.3f}"
-
-    max_edge_flow = max(edge_flow.values()) if edge_flow else 1.0
-    max_node_flow = max(node_flow.values()) if node_flow else 1.0
-
-    fig, ax = plt.subplots(figsize=(24, 16))
-
-    # Draw edges first
-    text_bg_style = dict(boxstyle="round,pad=0.25", facecolor="white", edgecolor="none", alpha=0.78)
+    # Draw directed edges with arrowheads
     for edge in G.edges.values():
         if edge.u not in positions or edge.v not in positions:
             continue
-        x0, y0 = positions[edge.u]
-        x1, y1 = positions[edge.v]
-        flow = edge_flow.get(edge.id, 0.0)
-        width = 1.0 + 3.0 * (flow / max_edge_flow)
-        base_color = "#8d99ae"
+        start = positions[edge.u]
+        end = positions[edge.v]
+        total_flow = edge_true_total.get(edge.id, 0.0)
+        linewidth = 1.2 + 3.5 * (abs(total_flow) / max_edge_total if max_edge_total else 0.0)
+        color = anomaly_edge_color if edge.id in edge_anomalies else base_edge_color
+        arrow = FancyArrowPatch(
+            start,
+            end,
+            arrowstyle="-|>",
+            linewidth=linewidth,
+            color=color,
+            alpha=0.9,
+            mutation_scale=14 + 10 * (abs(total_flow) / max_edge_total if max_edge_total else 0.0),
+            shrinkA=15.0,
+            shrinkB=15.0,
+            zorder=2,
+        )
+        ax.add_patch(arrow)
+
+        mid_x = (start[0] + end[0]) / 2.0
+        mid_y = (start[1] + end[1]) / 2.0
+        dx = end[0] - start[0]
+        dy = end[1] - start[1]
+        norm = math.hypot(dx, dy) or 1.0
+        offset_scale = 0.75 + 0.35 * (abs(total_flow) / max_edge_total if max_edge_total else 0.0)
+        label_x = mid_x - dy / norm * offset_scale
+        label_y = mid_y + dx / norm * offset_scale
+        label = f"{edge.id}\nΣtrue {format_value(total_flow)}"
         if edge.id in edge_anomalies:
-            types = edge_anomalies[edge.id]
-            base_color = "#d62728" if "leak" in types else "#9467bd"
-            width = max(width, 3.2)
-        ax.plot(
-            [x0, x1],
-            [y0, y1],
-            color=base_color,
-            linewidth=width,
-            alpha=0.85,
-            solid_capstyle="round",
-            zorder=1,
-        )
-        mid_x = (x0 + x1) / 2
-        mid_y = (y0 + y1) / 2
-        dx = x1 - x0
-        dy = y1 - y0
-        dist = math.hypot(dx, dy) or 1.0
-        nx = -dy / dist
-        ny = dx / dist
-        normal_offset = 0.46 + 0.28 * (flow / max_edge_flow if max_edge_flow else 0.0)
-        base_x = mid_x + nx * normal_offset
-        base_y = mid_y + ny * normal_offset
-        label_x, label_y = reserve_label_position(
-            base_x,
-            base_y,
-            min_dist=1.5,
-            node_clearance=1.05,
-        )
-        true_sum = edge_true_sum.get(edge.id, 0.0)
-        read_sum = edge_measured_sum.get(edge.id, 0.0)
-        label_text = "\n".join(
-            [
-                f"{format_value(flow)} avg",
-                f"sum {format_value(true_sum)} | read {format_value(read_sum)}",
-            ]
-        )
+            label += "\n⚠"
         ax.text(
             label_x,
             label_y,
-            label_text,
+            label,
             fontsize=9,
-            color="#444444",
             ha="center",
             va="center",
-            bbox=text_bg_style,
+            color="#1f1f1f",
+            bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.85, edgecolor="none"),
             zorder=4,
         )
 
@@ -1070,78 +985,76 @@ def plot_network_overview(
         if node_id not in positions:
             continue
         x, y = positions[node_id]
-        flow_value = node_flow.get(node_id, 0.0)
-        size = 250 + 1200 * (flow_value / max_node_flow) if max_node_flow > 0 else 300
-        base_color = type_colors.get(node_kind.get(node_id, "junction"), "#d4d4d4")
+        total_true = true_per_node.get(node_id, 0.0)
+        base_color = base_node_colors.get(kind_per_node.get(node_id, "junction"), "#ced4da")
         if node_id in node_anomalies:
-            types = node_anomalies[node_id]
-            if "leak" in types:
-                base_color = "#d62728"
+            if any(etype == "leak" for etype in node_anomalies[node_id]):
+                base_color = "#ef476f"
             else:
-                base_color = "#9467bd"
+                base_color = "#8e7cc3"
+        size = 320 + 1400 * (abs(total_true) / max_node_total if max_node_total else 0.0)
         ax.scatter(
             [x],
             [y],
             s=size,
             color=base_color,
-            edgecolors="#2f2f2f",
-            linewidth=1.0,
+            edgecolors="#212529",
+            linewidths=1.1,
             zorder=3,
         )
 
         label_lines = [node_id]
-        display_value = meter_flow.get(node.meter_id, flow_value) if node.meter_id else flow_value
-        if display_value is not None:
-            label_lines.append(f"{format_value(display_value)} avg")
-        # Offset downward proportional to node size to avoid overlap with other nodes
-        offset = 0.45 + (size / 1500.0) * 0.22
-        label_x, label_y = reserve_label_position(
-            x,
-            y - offset,
-            min_dist=1.35,
-            node_clearance=1.05,
-            anchor=(x, y),
-        )
+        if node.type == "consumer":
+            label_lines.append(f"Σtrue {format_value(total_true)}")
+            measured_total = measured_per_node.get(node_id)
+            if measured_total is not None:
+                label_lines.append(f"Σmeas {format_value(measured_total)}")
+        elif node.type == "source":
+            label_lines.append(f"Σout {format_value(total_true)}")
+
+        if node_id in node_anomalies:
+            label_lines.append("⚠")
+
         ax.text(
-            label_x,
-            label_y,
+            x,
+            y - (math.sqrt(size) * 0.025 + 0.6),
             "\n".join(label_lines),
             ha="center",
             va="top",
             fontsize=9,
-            color="#1f1f1f",
-            bbox=text_bg_style,
+            color="#212529",
+            bbox=dict(boxstyle="round,pad=0.25", facecolor="white", alpha=0.9, edgecolor="none"),
             zorder=4,
         )
 
-    # Legend
-    legend_handles: List[Any] = [
-        Patch(facecolor=type_colors["source"], edgecolor="#2f2f2f", label="Source"),
-        Patch(facecolor=type_colors["consumer"], edgecolor="#2f2f2f", label="Consumer"),
-        Patch(facecolor=type_colors["junction"], edgecolor="#2f2f2f", label="Junction"),
+    all_x = [pos[0] for pos in positions.values()]
+    all_y = [pos[1] for pos in positions.values()]
+    if all_x and all_y:
+        x_min, x_max = min(all_x), max(all_x)
+        y_min, y_max = min(all_y), max(all_y)
+        x_margin = max(4.0, (x_max - x_min) * 0.12)
+        y_margin = max(3.0, (y_max - y_min) * 0.18)
+        ax.set_xlim(x_min - x_margin, x_max + x_margin)
+        ax.set_ylim(y_min - y_margin, y_max + y_margin)
+
+    ax.axis("off")
+
+    legend_handles = [
+        Patch(facecolor=base_node_colors["source"], edgecolor="#212529", label="Source"),
+        Patch(facecolor=base_node_colors["consumer"], edgecolor="#212529", label="Consumer"),
+        Patch(facecolor=base_node_colors["junction"], edgecolor="#212529", label="Junction"),
+        Line2D([0], [0], color=base_edge_color, lw=2.5, label="Edge true flow (Σ)"),
     ]
-    has_meter_offsets = any(any(t != "leak" for t in types) for types in node_anomalies.values())
-    if has_meter_offsets:
-        legend_handles.append(Patch(facecolor="#9467bd", edgecolor="#2f2f2f", label="Meter anomaly"))
-    if any("leak" in types for types in itertools.chain(edge_anomalies.values(), node_anomalies.values())):
-        legend_handles.append(Patch(facecolor="#d62728", edgecolor="#2f2f2f", label="Leak anomaly"))
-    legend_handles.append(Line2D([0], [0], color="#8d99ae", lw=2.5, label="Avg edge flow"))
+    if edge_anomalies:
+        legend_handles.append(Line2D([0], [0], color=anomaly_edge_color, lw=2.5, label="Edge anomaly"))
+    if any(node_anomalies.values()):
+        legend_handles.append(Patch(facecolor="#8e7cc3", edgecolor="#212529", label="Node anomaly"))
 
     ax.legend(handles=legend_handles, loc="upper left", frameon=False)
-    ax.set_title("Network Overview with Flows and Anomalies")
-    ax.axis("off")
-    label_extents_x = [float(p[0]) for p in label_positions] if label_positions else []
-    label_extents_y = [float(p[1]) for p in label_positions] if label_positions else []
-    all_x = [pos[0] for pos in positions.values()] + label_extents_x
-    all_y = [pos[1] for pos in positions.values()] + label_extents_y
-    x_min, x_max = min(all_x), max(all_x)
-    y_min, y_max = min(all_y), max(all_y)
-    span = max(x_max - x_min, y_max - y_min)
-    margin = max(5.0, span * 0.28)
-    ax.set_xlim(x_min - margin, x_max + margin)
-    ax.set_ylim(y_min - margin, y_max + margin)
     fig.tight_layout()
     return fig
+
+
 
 
 def simulate(

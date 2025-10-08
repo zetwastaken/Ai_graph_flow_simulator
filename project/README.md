@@ -136,9 +136,10 @@ without changing the true flow.
 
 For quick experiments the repository includes ready‑made examples in
 `project/data/sample_events_leaks.csv` (multiple leak events) and
-`project/data/sample_events_anomalies.yaml` (a mix of leak and meter offset
-anomalies).  These files can be referenced via the `--events` argument when
-running the simulator CLI or the dashboard utility.
+`project/data/sample_events_anomalies.yaml` (thirty mixed leak and meter offset
+scenarios, including additive, multiplicative and drifting offsets).  These
+files can be referenced via the `--events` argument when running the simulator
+CLI or the dashboard utility.
 
 ## Running tests
 

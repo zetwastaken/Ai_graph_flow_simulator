@@ -9,6 +9,7 @@ import os
 import sys
 import threading
 from pathlib import Path
+from typing import Any
 
 # Import simulate with fallback to absolute import when executed as a script
 try:
@@ -17,6 +18,14 @@ try:
 except Exception:
     # When run as a script the relative import will fail; fall back to local package
     from sim.generator import plot_network_overview, plot_timeseries, simulate  # type: ignore
+
+try:
+    from .viz.interactive_network import build_interactive_network_figure  # type: ignore
+except Exception:  # pragma: no cover - fallback for script execution
+    try:
+        from viz.interactive_network import build_interactive_network_figure  # type: ignore
+    except Exception:  # pragma: no cover - optional dependency may be missing
+        build_interactive_network_figure = None  # type: ignore[assignment]
 
 
 def launch_gui() -> None:
@@ -41,6 +50,9 @@ def launch_gui() -> None:
     status_var = tk.StringVar(value="Waiting for input")
 
     summary = tk.Text(root, height=6, width=60, state="disabled")
+    show_timeseries_var = tk.BooleanVar(value=True)
+    show_overview_var = tk.BooleanVar(value=True)
+    show_interactive_var = tk.BooleanVar(value=False)
 
     def make_selector(label: str, text_var: "tk.StringVar", browse_callback) -> None:
         frame = tk.Frame(root)
@@ -111,23 +123,52 @@ def launch_gui() -> None:
                     lines.append(f"Outputs saved to: {out_dir}")
                 update_summary("\n".join(lines))
                 status_var.set("Simulation complete.")
+                show_timeseries = show_timeseries_var.get()
+                show_overview = show_overview_var.get()
+                show_interactive = show_interactive_var.get()
                 try:
-                    ts_fig = plot_timeseries(meters_df, labels_df)
-                    graph_obj = result.get("graph")
+                    ts_fig = None
                     network_fig = None
-                    if graph_obj is not None:
+                    graph_obj: Any = result.get("graph")
+                    if show_timeseries or out_dir:
+                        ts_fig = plot_timeseries(meters_df, labels_df)
+                    if (show_overview or out_dir) and graph_obj is not None:
                         network_fig = plot_network_overview(graph_obj, meters_df, edges_df, labels_df)
+                    if ts_fig is not None and show_timeseries:
+                        ts_fig.show()
+                    if network_fig is not None and show_overview:
+                        network_fig.show()
                     if out_dir:
-                        plot_path = os.path.join(out_dir, "timeseries.svg")
-                        ts_fig.savefig(plot_path, format="svg")
+                        if ts_fig is not None:
+                            plot_path = os.path.join(out_dir, "timeseries.svg")
+                            ts_fig.savefig(plot_path, format="svg")
                         if network_fig is not None:
                             network_path = os.path.join(out_dir, "network_overview.svg")
                             network_fig.savefig(network_path, format="svg")
-                    ts_fig.show()
-                    if network_fig is not None:
-                        network_fig.show()
                 except Exception as plot_err:
                     messagebox.showwarning("Plot error", f"Could not render plot: {plot_err}")
+
+                if show_interactive:
+                    graph_obj = result.get("graph")
+                    if not callable(build_interactive_network_figure):
+                        messagebox.showwarning(
+                            "Interactive viewer unavailable",
+                            "Plotly-based interactive viewer is not available in this environment.",
+                        )
+                    elif graph_obj is None:
+                        messagebox.showwarning(
+                            "Interactive viewer error",
+                            "Simulation did not return graph data required for the interactive viewer.",
+                        )
+                    else:
+                        try:
+                            interactive_fig = build_interactive_network_figure(graph_obj, edges_df, meters_df)  # type: ignore[misc]
+                            interactive_fig.show()
+                        except Exception as interactive_err:
+                            messagebox.showwarning(
+                                "Interactive viewer error",
+                                f"Could not render interactive viewer: {interactive_err}",
+                            )
 
             root.after(0, on_complete)
 
@@ -137,6 +178,20 @@ def launch_gui() -> None:
     make_selector("Config YAML:", config_var, lambda: config_var.set(browse_file("Select configuration", [("YAML files", "*.yaml *.yml"), ("All files", "*")]) or config_var.get()))
     make_selector("Events (optional):", events_var, lambda: events_var.set(browse_file("Select events file", [("CSV files", "*.csv"), ("YAML files", "*.yaml *.yml"), ("All files", "*")]) or events_var.get()))
     make_selector("Output directory:", out_var, lambda: out_var.set(browse_dir("Select output directory") or out_var.get()))
+
+    viz_frame = tk.LabelFrame(root, text="Visualisations")
+    viz_frame.pack(fill="x", padx=10, pady=(5, 5))
+    tk.Checkbutton(viz_frame, text="Timeseries plot", variable=show_timeseries_var).pack(anchor="w")
+    tk.Checkbutton(viz_frame, text="Network overview", variable=show_overview_var).pack(anchor="w")
+    interactive_available = callable(build_interactive_network_figure)
+    if not interactive_available:
+        show_interactive_var.set(False)
+    tk.Checkbutton(
+        viz_frame,
+        text="Interactive network (requires Plotly)",
+        variable=show_interactive_var,
+        state="normal" if interactive_available else "disabled",
+    ).pack(anchor="w")
 
     button_frame = tk.Frame(root)
     button_frame.pack(fill="x", padx=10, pady=10)
