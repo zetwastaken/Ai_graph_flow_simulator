@@ -517,13 +517,18 @@ def compute_source_and_edge_flows(
     for consumer_id, route in routes.items():
         src = route["source"]
         source_to_consumers.setdefault(src, []).append(consumer_id)
-    for source_id, cons_list in source_to_consumers.items():
+    all_sources = [n.id for n in G.nodes.values() if n.type == "source"]
+    for source_id in all_sources:
+        cons_list = source_to_consumers.get(source_id, [])
         node = G.nodes[source_id]
         meter_id = node.meter_id
         if meter_id is None:
             continue
         # Sum baseline consumption across consumers for each time
-        baseline_sum = baseline_df[cons_list].sum(axis=1)
+        if cons_list:
+            baseline_sum = baseline_df[cons_list].sum(axis=1)
+        else:
+            baseline_sum = pd.Series(0.0, index=time_index)
         # Apply loss rate
         source_true = baseline_sum * (1.0 + loss_rate)
         for ts, flow in zip(time_index, source_true):
