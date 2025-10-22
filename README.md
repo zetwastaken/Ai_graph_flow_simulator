@@ -49,7 +49,38 @@ Projekt wykorzystuje język Python oraz zestaw narzędzi do analizy danych i sym
 *   Aplikacja ma charakter prototypowy i działa w środowisku lokalnym.
 
 ## Wymagania techniczne
-*   
+*   Python 3.8+
+*   Biblioteki: numpy, pandas, networkx, matplotlib, scipy
+
+# Implementacja
+
+Projekt został zaimplementowany zgodnie z wymaganiami opisanymi w dokumentacji. Zawiera następujące moduły:
+
+*   `network_topology.py` - generowanie topologii sieci w postaci grafu
+*   `config.py` - konfiguracja parametrów symulacji
+*   `data_generator.py` - generowanie syntetycznych danych pomiarowych
+*   `anomaly_simulator.py` - symulacja anomalii (wycieków i błędów liczników)
+*   `visualizer.py` - wizualizacja danych i statystyk
+*   `simulator.py` - główny koordynator symulacji
+
+## Uruchomienie
+
+1. Instalacja zależności:
+```bash
+pip install -r requirements.txt
+```
+
+2. Uruchomienie podstawowej symulacji:
+```bash
+python main.py
+```
+
+3. Uruchomienie przykładów:
+```bash
+python examples.py [numer_przykładu]
+```
+
+Szczegółowa dokumentacja znajduje się w pliku `USAGE.md`.
 
 # Wymagania niefunkcjonalne
 *   **Wydajność** – System powinien generować dane dla minimum 100 punktów pomiarowych z częstotliwością 1 Hz w czasie rzeczywistym.
