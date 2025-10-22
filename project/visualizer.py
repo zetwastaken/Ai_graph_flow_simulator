@@ -6,6 +6,7 @@ Creates plots and charts for flow analysis.
 import matplotlib.pyplot as plt
 import pandas as pd
 import networkx as nx
+import numpy as np
 from typing import List, Optional, Dict
 import os
 
@@ -201,24 +202,67 @@ class FlowVisualizer:
                 G.nodes[node]['avg_flow'] = 0
         
         # Calculate edge flows (sum of downstream node flows)
-        edge_flows = {}
+        # For total amounts, we'll sum all flow that passed through each edge
+        edge_total_flows = {}
+        edge_avg_flows = {}
+        
         for edge in G.edges():
             source, target = edge
             # Edge flow is approximately the flow through the target node
             if target in node_avg_flow:
-                edge_flows[edge] = node_avg_flow[target]
+                edge_avg_flows[edge] = node_avg_flow[target]
+                edge_total_flows[edge] = node_totals.get(target, 0)
             else:
                 # For edges to hubs, sum all downstream consumer flows
                 downstream_consumers = list(nx.descendants(G, target))
-                edge_flow = sum(node_avg_flow.get(n, 0) for n in downstream_consumers)
-                edge_flows[edge] = edge_flow
+                edge_avg_flow = sum(node_avg_flow.get(n, 0) for n in downstream_consumers)
+                edge_total_flow = sum(node_totals.get(n, 0) for n in downstream_consumers)
+                edge_avg_flows[edge] = edge_avg_flow
+                edge_total_flows[edge] = edge_total_flow
         
-        # Create figure
-        fig, ax = plt.subplots(figsize=(16, 12))
+        # Create figure with larger size for better spacing
+        fig, ax = plt.subplots(figsize=(20, 16))
         
-        # Use spring layout for force-directed positioning
-        pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
+        # Use Kamada-Kawai layout for better edge crossing reduction
+        # This algorithm minimizes energy and reduces edge crossings
+        # Increased scale parameter spreads nodes further apart
+        try:
+            pos = nx.kamada_kawai_layout(G, scale=5.0)
+        except:
+            # Fallback to spring layout if Kamada-Kawai fails
+            # Higher k value pushes nodes further apart
+            pos = nx.spring_layout(G, k=5.0, iterations=150, seed=42)
         
+        # Apply an extra repulsion step so nodes stay separated even in dense areas
+        def _apply_repulsion(positions: Dict[str, List[float]],
+                             min_distance: float = 1.5,
+                             iterations: int = 200) -> Dict[str, List[float]]:
+            """Push nodes apart when they are closer than the requested distance."""
+            rng = np.random.default_rng(42)
+            adjusted = {node: np.array(coord, dtype=float) for node, coord in positions.items()}
+            nodes_list = list(adjusted.keys())
+            for _ in range(iterations):
+                moved = False
+                for i, node_u in enumerate(nodes_list):
+                    for node_v in nodes_list[i + 1:]:
+                        delta = adjusted[node_u] - adjusted[node_v]
+                        distance = np.linalg.norm(delta)
+                        if distance < 1e-6:
+                            # Random tiny nudge breaks perfect overlap
+                            delta = rng.normal(size=2)
+                            distance = np.linalg.norm(delta)
+                        if distance < min_distance and distance > 0:
+                            # Push both nodes away from each other
+                            move_vec = (min_distance - distance) * (delta / distance) * 0.5
+                            adjusted[node_u] += move_vec
+                            adjusted[node_v] -= move_vec
+                            moved = True
+                if not moved:
+                    break
+            return {node: coord.tolist() for node, coord in adjusted.items()}
+
+        pos = _apply_repulsion(pos)
+
         # Prepare node colors and sizes based on flow
         node_colors = []
         node_sizes = []
@@ -248,10 +292,10 @@ class FlowVisualizer:
         edge_widths = []
         edge_colors = []
         for edge in G.edges():
-            flow = edge_flows.get(edge, 0)
+            flow = edge_avg_flows.get(edge, 0)
             if flow > 0:
                 # Normalize width between 1 and 8
-                max_flow = max(edge_flows.values()) if edge_flows else 1
+                max_flow = max(edge_avg_flows.values()) if edge_avg_flows else 1
                 width = 1 + (flow / max_flow * 7)
             else:
                 width = 1
@@ -259,7 +303,7 @@ class FlowVisualizer:
             edge_colors.append('#666666')
         
         # Draw the graph
-        nx.draw_networkx_edges(G, pos, width=edge_widths, edge_color=edge_colors,
+        nx.draw_networkx_edges(G, pos, width=edge_widths, edge_color=edge_colors,  # type: ignore[arg-type]
                               alpha=0.6, arrows=True, arrowsize=20, ax=ax,
                               arrowstyle='->', connectionstyle='arc3,rad=0.1')
         
@@ -275,17 +319,18 @@ class FlowVisualizer:
             else:
                 node_labels[node] = node
         
-        nx.draw_networkx_labels(G, pos, node_labels, font_size=8,
+        nx.draw_networkx_labels(G, pos, node_labels, font_size=9,
                                font_weight='bold', ax=ax)
         
-        # Draw edge labels with flow amounts
+        # Draw edge labels with total flow amounts and average rate
         edge_labels = {}
         for edge in G.edges():
-            flow = edge_flows.get(edge, 0)
-            if flow > 0:
-                edge_labels[edge] = f"{flow:.1f} m³/h"
+            total_flow = edge_total_flows.get(edge, 0)
+            avg_flow = edge_avg_flows.get(edge, 0)
+            if total_flow > 0 or avg_flow > 0:
+                edge_labels[edge] = f"{total_flow:.0f} m³\n({avg_flow:.1f} m³/h)"
         
-        nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=7,
+        nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=8,
                                     font_color='#333333', ax=ax)
         
         # Add legend
@@ -298,8 +343,9 @@ class FlowVisualizer:
         ax.legend(handles=legend_elements, loc='upper left', fontsize=10)
         
         # Add title and description
-        ax.set_title('Force-Directed Network Topology\n' + 
-                    'Node size = Total flow volume | Edge thickness = Average flow rate',
+        ax.set_title('Force-Directed Network Topology (Kamada-Kawai Layout)\n' + 
+                    'Node size = Total flow volume | Edge thickness = Average flow rate\n' +
+                    'Edge labels show: Total volume (Average rate)',
                     fontsize=14, fontweight='bold', pad=20)
         
         ax.axis('off')
