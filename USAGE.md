@@ -35,6 +35,7 @@ The simulator generates the following files in the `output/` directory:
 - `flow_plot.png` - Flow visualization for sample nodes
 - `flow_statistics.png` - Statistical analysis of flows
 - `anomaly_distribution.png` - Anomaly type and magnitude distribution
+- `force_directed_graph.png` - **NEW**: Force-directed graph visualization of network topology
 
 ## Custom Configuration
 
@@ -83,6 +84,12 @@ Creates plots for:
 - Flow time series with anomaly highlighting
 - Flow statistics by node
 - Anomaly distribution analysis
+- **Force-directed graph**: Network topology visualization showing:
+  - Total read data from nodes (sum of all flow measurements in m³)
+  - Total flow amounts on edges (average flow rate in m³/h)
+  - Color-coded nodes by type (source, hub, consumer)
+  - Node size proportional to total flow volume
+  - Edge thickness proportional to average flow rate
 
 ### Simulator (`simulator.py`)
 Main orchestrator that coordinates all components and manages the simulation workflow.
@@ -109,6 +116,40 @@ for node_id, df in sim.time_series.items():
 sim.save_data()
 sim.visualize()
 ```
+
+## Force-Directed Graph Visualization
+
+The simulator automatically generates a force-directed graph visualization that provides an intuitive view of the network topology and flow distribution.
+
+### Features
+
+- **Force-directed layout**: Uses NetworkX spring layout algorithm for automatic, physics-based node positioning
+- **Node visualization**:
+  - **Color**: Red (source), Blue (hubs), Green (consumers)
+  - **Size**: Proportional to total flow volume (sum of all readings)
+  - **Label**: Shows node ID and total flow in m³
+- **Edge visualization**:
+  - **Thickness**: Proportional to average flow rate through the connection
+  - **Label**: Shows average flow rate in m³/h
+  - **Direction**: Arrows indicate flow direction from source to consumers
+- **Interactive legend**: Shows node type color coding
+
+### Interpretation
+
+The force-directed graph helps you:
+- Identify high-flow vs low-flow nodes by size
+- Understand network structure and connectivity
+- Visualize flow distribution across the network
+- Spot potential bottlenecks (thick edges)
+- Analyze hub importance in the distribution network
+
+### Example
+
+The visualization shows:
+- The root source node (red) at the center
+- Hub nodes (blue) distributing flow to regions
+- Consumer nodes (green) at the periphery with varying sizes
+- Edge thickness indicating major vs minor flow paths
 
 ## Performance Notes
 
