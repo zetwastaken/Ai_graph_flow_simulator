@@ -136,6 +136,10 @@ class FlowSimulator:
         else:
             print("No anomalies to plot")
         
+        # Create force-directed graph visualization
+        self.visualizer.plot_force_directed_graph(self.topology.graph, all_data)
+        print("Force-directed graph visualization created")
+        
         print(f"Visualizations saved to {self.config.output_dir}")
     
     def generate_report(self) -> Dict:

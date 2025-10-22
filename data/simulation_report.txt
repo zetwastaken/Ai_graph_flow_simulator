@@ -1,0 +1,6 @@
+Simulation Report
+
+Total duration: 3600 seconds
+Number of nodes: 50
+Number of data points: 180000
+Number of anomalies injected: 28
