@@ -58,7 +58,7 @@ def example_large_network():
     config = SimulationConfig(
         num_nodes=50,
         duration_hours=24,
-        sampling_frequency_hz=0.05,  # Sample every 20 seconds
+        sampling_frequency_hz=0.05,  # 0.05 Hz = 1 sample every 20 seconds
         base_flow_rate=150.0,
         anomaly_probability=0.15,
         output_dir="output/example3"
