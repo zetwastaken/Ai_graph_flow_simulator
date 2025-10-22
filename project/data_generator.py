@@ -23,7 +23,8 @@ class FlowDataGenerator:
             config: Simulation configuration
         """
         self.config = config
-        np.random.seed(42)  # For reproducibility
+        if hasattr(self.config, "seed") and self.config.seed is not None:
+            np.random.seed(self.config.seed)  # For reproducibility and variability
     
     def generate_base_flow(self, num_samples: int, node_id: str) -> np.ndarray:
         """
