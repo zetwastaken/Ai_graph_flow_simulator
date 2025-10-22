@@ -5,7 +5,8 @@ Creates plots and charts for flow analysis.
 
 import matplotlib.pyplot as plt
 import pandas as pd
-from typing import List, Optional
+import networkx as nx
+from typing import List, Optional, Dict
 import os
 
 
@@ -164,6 +165,150 @@ class FlowVisualizer:
             plt.savefig(save_path, dpi=150, bbox_inches='tight')
         else:
             plt.savefig(os.path.join(self.output_dir, 'flow_statistics.png'),
+                       dpi=150, bbox_inches='tight')
+        
+        plt.close()
+    
+    def plot_force_directed_graph(self, topology_graph: nx.DiGraph, 
+                                  time_series: pd.DataFrame,
+                                  save_path: Optional[str] = None):
+        """
+        Create a force-directed graph visualization showing network topology
+        with total read data from nodes and total amounts on edges.
+        
+        Args:
+            topology_graph: NetworkX graph representing the network topology
+            time_series: Combined time series DataFrame with flow measurements
+            save_path: Path to save the plot
+        """
+        # Calculate total flow per node (sum of all readings)
+        node_totals = time_series.groupby('node_id')['flow'].sum().to_dict()
+        
+        # Calculate average flow per node for edge flow estimation
+        node_avg_flow = time_series.groupby('node_id')['flow'].mean().to_dict()
+        
+        # Create a copy of the graph to add attributes
+        G = topology_graph.copy()
+        
+        # Add total flow as node attribute
+        for node in G.nodes():
+            if node in node_totals:
+                G.nodes[node]['total_flow'] = node_totals[node]
+                G.nodes[node]['avg_flow'] = node_avg_flow[node]
+            else:
+                # For source/hub nodes without measurements, estimate from downstream
+                G.nodes[node]['total_flow'] = 0
+                G.nodes[node]['avg_flow'] = 0
+        
+        # Calculate edge flows (sum of downstream node flows)
+        edge_flows = {}
+        for edge in G.edges():
+            source, target = edge
+            # Edge flow is approximately the flow through the target node
+            if target in node_avg_flow:
+                edge_flows[edge] = node_avg_flow[target]
+            else:
+                # For edges to hubs, sum all downstream consumer flows
+                downstream_consumers = list(nx.descendants(G, target))
+                edge_flow = sum(node_avg_flow.get(n, 0) for n in downstream_consumers)
+                edge_flows[edge] = edge_flow
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=(16, 12))
+        
+        # Use spring layout for force-directed positioning
+        pos = nx.spring_layout(G, k=2, iterations=50, seed=42)
+        
+        # Prepare node colors and sizes based on flow
+        node_colors = []
+        node_sizes = []
+        for node in G.nodes():
+            node_type = G.nodes[node].get('node_type', 'unknown')
+            total_flow = G.nodes[node].get('total_flow', 0)
+            
+            if node_type == 'source':
+                node_colors.append('#ff4444')  # Red for source
+                node_sizes.append(3000)
+            elif node_type == 'hub':
+                node_colors.append('#4444ff')  # Blue for hubs
+                node_sizes.append(2000)
+            elif node_type == 'consumer':
+                node_colors.append('#44ff44')  # Green for consumers
+                # Size based on total flow (normalized)
+                if total_flow > 0:
+                    size = 500 + (total_flow / max(node_totals.values()) * 1500)
+                else:
+                    size = 500
+                node_sizes.append(size)
+            else:
+                node_colors.append('#888888')
+                node_sizes.append(500)
+        
+        # Draw edges with varying thickness based on flow
+        edge_widths = []
+        edge_colors = []
+        for edge in G.edges():
+            flow = edge_flows.get(edge, 0)
+            if flow > 0:
+                # Normalize width between 1 and 8
+                max_flow = max(edge_flows.values()) if edge_flows else 1
+                width = 1 + (flow / max_flow * 7)
+            else:
+                width = 1
+            edge_widths.append(width)
+            edge_colors.append('#666666')
+        
+        # Draw the graph
+        nx.draw_networkx_edges(G, pos, width=edge_widths, edge_color=edge_colors,
+                              alpha=0.6, arrows=True, arrowsize=20, ax=ax,
+                              arrowstyle='->', connectionstyle='arc3,rad=0.1')
+        
+        nx.draw_networkx_nodes(G, pos, node_color=node_colors, node_size=node_sizes,
+                              alpha=0.9, ax=ax)
+        
+        # Draw node labels with total flow
+        node_labels = {}
+        for node in G.nodes():
+            total_flow = G.nodes[node].get('total_flow', 0)
+            if total_flow > 0:
+                node_labels[node] = f"{node}\n{total_flow:.0f} m³"
+            else:
+                node_labels[node] = node
+        
+        nx.draw_networkx_labels(G, pos, node_labels, font_size=8,
+                               font_weight='bold', ax=ax)
+        
+        # Draw edge labels with flow amounts
+        edge_labels = {}
+        for edge in G.edges():
+            flow = edge_flows.get(edge, 0)
+            if flow > 0:
+                edge_labels[edge] = f"{flow:.1f} m³/h"
+        
+        nx.draw_networkx_edge_labels(G, pos, edge_labels, font_size=7,
+                                    font_color='#333333', ax=ax)
+        
+        # Add legend
+        from matplotlib.patches import Patch
+        legend_elements = [
+            Patch(facecolor='#ff4444', label='Source Node'),
+            Patch(facecolor='#4444ff', label='Hub Node'),
+            Patch(facecolor='#44ff44', label='Consumer Node')
+        ]
+        ax.legend(handles=legend_elements, loc='upper left', fontsize=10)
+        
+        # Add title and description
+        ax.set_title('Force-Directed Network Topology\n' + 
+                    'Node size = Total flow volume | Edge thickness = Average flow rate',
+                    fontsize=14, fontweight='bold', pad=20)
+        
+        ax.axis('off')
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=150, bbox_inches='tight')
+        else:
+            plt.savefig(os.path.join(self.output_dir, 'force_directed_graph.png'),
                        dpi=150, bbox_inches='tight')
         
         plt.close()
