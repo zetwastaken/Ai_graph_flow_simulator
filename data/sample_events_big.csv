@@ -1,0 +1,27 @@
+id,type,ts_start,duration,target_kind,target_id,magnitude,mode
+ev_big_01,leak,2025-01-01 00:10:00,60,edge,e_root_north,12.5,const
+ev_big_02,offset,2025-01-01 01:10:00,50,meter,meter_src_north,5.0,add
+ev_big_03,leak,2025-01-01 02:15:00,80,edge,e_root_south,14.2,const
+ev_big_04,offset,2025-01-01 03:10:00,60,meter,meter_src_south,-4.2,add
+ev_big_05,leak,2025-01-01 04:10:00,70,edge,e_root_east,11.6,const
+ev_big_06,offset,2025-01-01 05:10:00,80,meter,meter_src_east,0.75,mul
+ev_big_07,leak,2025-01-01 06:10:00,90,edge,e_root_west,10.8,const
+ev_big_08,offset,2025-01-01 07:10:00,70,meter,meter_src_west,3.2,drift
+ev_big_09,leak,2025-01-01 08:10:00,50,edge,e_hub_n_branch1,9.5,const
+ev_big_10,offset,2025-01-01 09:05:00,45,meter,meter_c01,4.4,add
+ev_big_11,leak,2025-01-01 10:00:00,60,edge,e_branch_n1_c02,9.1,const
+ev_big_12,offset,2025-01-01 10:55:00,55,meter,meter_c02,-3.8,add
+ev_big_13,leak,2025-01-01 11:50:00,65,edge,e_branch_n2_c03,9.8,const
+ev_big_14,offset,2025-01-01 12:45:00,45,meter,meter_c03,0.95,mul
+ev_big_15,leak,2025-01-01 13:40:00,75,edge,e_branch_n2_c04,11.0,const
+ev_big_16,offset,2025-01-01 14:35:00,60,meter,meter_c04,5.6,add
+ev_big_17,leak,2025-01-01 15:35:00,70,edge,e_branch_s1_c05,10.4,const
+ev_big_18,offset,2025-01-01 16:30:00,50,meter,meter_c05,2.7,drift
+ev_big_19,leak,2025-01-01 17:25:00,80,edge,e_branch_s1_c06,9.9,const
+ev_big_20,offset,2025-01-01 18:20:00,55,meter,meter_c06,-0.55,mul
+ev_big_21,leak,2025-01-01 19:15:00,65,edge,e_branch_s2_c07,10.2,const
+ev_big_22,offset,2025-01-01 20:10:00,70,meter,meter_c07,5.0,add
+ev_big_23,leak,2025-01-01 21:05:00,60,edge,e_branch_s2_c08,13.4,const
+ev_big_24,offset,2025-01-01 22:00:00,55,meter,meter_c08,0.85,mul
+ev_big_25,leak,2025-01-01 22:55:00,70,edge,e_branch_e1_c09,12.8,const
+ev_big_26,offset,2025-01-01 23:55:00,50,meter,meter_c09,-4.5,add
