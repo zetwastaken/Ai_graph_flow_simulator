@@ -18,7 +18,7 @@ class SimulationConfig:
     # Time parameters
     start_time: datetime = None
     duration_hours: int = 24
-    sampling_frequency_hz: float = 1.0  # 1 Hz = 1 sample per second
+    sampling_frequency_hz: float = 1.0  # 1 Hz = 1 sample/second
     
     # Flow parameters
     base_flow_rate: float = 100.0  # Base flow rate in m³/h
