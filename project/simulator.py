@@ -99,12 +99,11 @@ class FlowSimulator:
             all_data.to_json(flow_path, orient='records', date_format='iso')
             print(f"Flow data saved to {flow_path}")
         
-        # Save anomaly report
-        if self.anomalies:
-            anomaly_df = self.anomaly_simulator.get_anomaly_report()
-            anomaly_path = os.path.join(self.config.output_dir, 'anomalies.csv')
-            anomaly_df.to_csv(anomaly_path, index=False)
-            print(f"Anomaly report saved to {anomaly_path}")
+        # Save anomaly report (always save, even if empty)
+        anomaly_df = self.anomaly_simulator.get_anomaly_report()
+        anomaly_path = os.path.join(self.config.output_dir, 'anomalies.csv')
+        anomaly_df.to_csv(anomaly_path, index=False)
+        print(f"Anomaly report saved to {anomaly_path}")
         
         # Save topology information
         topology_info = self.topology.get_topology_info()
@@ -129,11 +128,13 @@ class FlowSimulator:
         self.visualizer.plot_flow_statistics(all_data)
         print("Statistics plot created")
         
-        # Plot anomaly distribution
+        # Plot anomaly distribution (if there are any anomalies)
         if self.anomalies:
             anomaly_df = self.anomaly_simulator.get_anomaly_report()
             self.visualizer.plot_anomaly_distribution(anomaly_df)
             print("Anomaly distribution plot created")
+        else:
+            print("No anomalies to plot")
         
         print(f"Visualizations saved to {self.config.output_dir}")
     
