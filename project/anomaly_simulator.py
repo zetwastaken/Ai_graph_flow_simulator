@@ -6,7 +6,10 @@ Simulates leaks and meter errors in the network.
 import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
+
+import networkx as nx
+
 from .config import SimulationConfig
 
 
@@ -24,8 +27,16 @@ class AnomalySimulator:
         """
         self.config = config
         self.anomalies = []
+        self.graph: Optional[nx.DiGraph] = None
+        self.edge_catalog: Dict[str, Tuple[str, str]] = {}
+
+    def attach_topology(self, graph: nx.DiGraph):
+        """Store reference graph for cascade calculations."""
+        self.graph = graph
     
-    def generate_anomalies(self, node_ids: List[str], edge_ids: List[str]) -> List[Dict]:
+    def generate_anomalies(
+        self, node_ids: List[str], edge_catalog: Dict[str, Tuple[str, str]]
+    ) -> List[Dict]:
         """
         Generate random anomalies for the simulation.
         
@@ -36,6 +47,7 @@ class AnomalySimulator:
         Returns:
             List of anomaly definitions
         """
+        self.edge_catalog = edge_catalog
         anomalies = []
         
         # Calculate number of anomalies to generate
@@ -54,10 +66,9 @@ class AnomalySimulator:
             anomaly_type = np.random.choice(['leak', 'meter_error'])
             
             if anomaly_type == 'leak':
-                # Leak on an edge
-                target_edge = np.random.choice(edge_ids)
+                target_edge = np.random.choice(list(edge_catalog.keys()))
                 magnitude = np.random.uniform(*self.config.leak_magnitude_range)
-                
+                progressive = np.random.rand() < self.config.progressive_leak_probability
                 anomaly = {
                     'id': f'anom_{i+1:03d}',
                     'type': 'leak',
@@ -66,7 +77,7 @@ class AnomalySimulator:
                     'target_type': 'edge',
                     'target_id': target_edge,
                     'magnitude': magnitude,
-                    'mode': 'const'
+                    'mode': 'progressive' if progressive else 'const'
                 }
             else:
                 # Meter error on a node
@@ -94,8 +105,40 @@ class AnomalySimulator:
         self.anomalies = anomalies
         return anomalies
     
+    def _leak_profile(self, samples: int, anomaly: Dict) -> np.ndarray:
+        if samples <= 0:
+            return np.array([])
+        magnitude = anomaly['magnitude']
+        if anomaly.get('mode') == 'progressive':
+            return np.linspace(0, magnitude, samples)
+        return np.full(samples, magnitude)
+
+    def _propagate_leak(self, node_id: str, start: datetime, end: datetime,
+                        profile: np.ndarray, node_series: Dict[str, pd.DataFrame]):
+        if node_id not in node_series:
+            return
+        df = node_series[node_id]
+        mask = (df['timestamp'] >= start) & (df['timestamp'] < end)
+        samples = mask.sum()
+        if samples == 0:
+            return
+        reduction = profile
+        if len(profile) != samples and samples > 0:
+            reduction = np.interp(
+                np.linspace(0, len(profile) - 1, samples),
+                np.arange(len(profile)),
+                profile,
+            )
+        df.loc[mask, 'flow'] = (df.loc[mask, 'flow'] - reduction).clip(lower=0)
+        df.loc[mask, 'anomaly_type'] = 'leak'
+        df.loc[mask, 'anomaly_active'] = True
+        if self.graph is None:
+            return
+        for child in self.graph.successors(node_id):
+            self._propagate_leak(child, start, end, reduction, node_series)
+
     def apply_anomalies(self, time_series: Dict[str, pd.DataFrame], 
-                       edge_flows: Dict[str, pd.DataFrame] = None) -> Dict[str, pd.DataFrame]:
+                       edge_flows: Dict[str, pd.DataFrame]) -> Dict[str, pd.DataFrame]:
         """
         Apply anomalies to the time series data.
         
@@ -130,16 +173,21 @@ class AnomalySimulator:
                     df.loc[mask, 'anomaly_type'] = anomaly['type']
                     df.loc[mask, 'anomaly_active'] = True
             
-            elif anomaly['type'] == 'leak' and edge_flows is not None:
-                # Apply to edge flows
+            elif anomaly['type'] == 'leak':
                 target_id = anomaly['target_id']
                 if target_id in edge_flows:
                     df = edge_flows[target_id]
                     mask = (df['timestamp'] >= anomaly['start_time']) & (df['timestamp'] < end_time)
-                    df.loc[mask, 'flow'] -= anomaly['magnitude']
-                    df.loc[mask, 'flow'] = df.loc[mask, 'flow'].clip(lower=0)
+                    samples = mask.sum()
+                    if samples == 0:
+                        continue
+                    profile = self._leak_profile(samples, anomaly)
+                    df.loc[mask, 'flow'] = (df.loc[mask, 'flow'] - profile).clip(lower=0)
                     df.loc[mask, 'anomaly_type'] = anomaly['type']
                     df.loc[mask, 'anomaly_active'] = True
+                    if self.edge_catalog:
+                        _, target_node = self.edge_catalog[target_id]
+                        self._propagate_leak(target_node, anomaly['start_time'], end_time, profile, time_series)
         
         return time_series
     

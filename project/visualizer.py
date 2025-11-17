@@ -171,7 +171,8 @@ class FlowVisualizer:
         plt.close()
     
     def plot_force_directed_graph(self, topology_graph: nx.DiGraph, 
-                                  time_series: pd.DataFrame,
+                                  node_series: pd.DataFrame,
+                                  edge_series: pd.DataFrame,
                                   save_path: Optional[str] = None):
         """
         Create a force-directed graph visualization showing network topology
@@ -183,10 +184,8 @@ class FlowVisualizer:
             save_path: Path to save the plot
         """
         # Calculate total flow per node (sum of all readings)
-        node_totals = time_series.groupby('node_id')['flow'].sum().to_dict()
-        
-        # Calculate average flow per node for edge flow estimation
-        node_avg_flow = time_series.groupby('node_id')['flow'].mean().to_dict()
+        node_totals = node_series.groupby('node_id')['flow'].sum().to_dict()
+        node_avg_flow = node_series.groupby('node_id')['flow'].mean().to_dict()
         
         # Create a copy of the graph to add attributes
         G = topology_graph.copy()
@@ -201,24 +200,15 @@ class FlowVisualizer:
                 G.nodes[node]['total_flow'] = 0
                 G.nodes[node]['avg_flow'] = 0
         
-        # Calculate edge flows (sum of downstream node flows)
-        # For total amounts, we'll sum all flow that passed through each edge
         edge_total_flows = {}
         edge_avg_flows = {}
-        
-        for edge in G.edges():
-            source, target = edge
-            # Edge flow is approximately the flow through the target node
-            if target in node_avg_flow:
-                edge_avg_flows[edge] = node_avg_flow[target]
-                edge_total_flows[edge] = node_totals.get(target, 0)
-            else:
-                # For edges to hubs, sum all downstream consumer flows
-                downstream_consumers = list(nx.descendants(G, target))
-                edge_avg_flow = sum(node_avg_flow.get(n, 0) for n in downstream_consumers)
-                edge_total_flow = sum(node_totals.get(n, 0) for n in downstream_consumers)
-                edge_avg_flows[edge] = edge_avg_flow
-                edge_total_flows[edge] = edge_total_flow
+        meta = edge_series[['edge_id', 'source', 'target']].drop_duplicates().set_index('edge_id')
+        totals = edge_series.groupby('edge_id')['flow'].sum().to_dict()
+        avgs = edge_series.groupby('edge_id')['flow'].mean().to_dict()
+        for edge_id, row in meta.iterrows():
+            edge = (row['source'], row['target'])
+            edge_total_flows[edge] = totals.get(edge_id, 0.0)
+            edge_avg_flows[edge] = avgs.get(edge_id, 0.0)
         
         # Create figure with larger size for better spacing
         fig, ax = plt.subplots(figsize=(20, 16))

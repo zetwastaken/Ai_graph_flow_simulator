@@ -5,10 +5,10 @@ Celem projektu jest zaprojektowanie i implementacja systemu symulującego dane p
 Projekt stanowi etap przygotowawczy do budowy pełnego systemu detekcji anomalii – w niniejszej wersji skupia się wyłącznie na generowaniu i wizualizacji danych symulacyjnych.
 
 System będzie umożliwiał:
-*   tworzenie wirtualnej topologii sieci przesyłowej w postaci grafu,
-*   generowanie syntetycznych szeregów czasowych przepływów,
-*   dodawanie szumu pomiarowego oraz symulowanie anomalii,
-*   zapisywanie i wizualizację danych w czasie rzeczywistym.
+*   tworzenie wirtualnej topologii sieci przesyłowej w postaci grafu (drzewo/siatka/losowa),
+*   generowanie syntetycznych szeregów czasowych przepływów wraz z przepływami na krawędziach,
+*   dodawanie szumu pomiarowego oraz symulowanie anomalii (wycieki stałe/narastające, błędy liczników),
+*   zapisywanie, strumieniowanie (REST/WebSocket) i wizualizację danych w czasie rzeczywistym.
 
 Projekt wykorzystuje język Python oraz zestaw narzędzi do analizy danych i symulacji.
 
@@ -54,14 +54,17 @@ Projekt wykorzystuje język Python oraz zestaw narzędzi do analizy danych i sym
 
 # Implementacja
 
-Projekt został zaimplementowany zgodnie z wymaganiami opisanymi w dokumentacji. Zawiera następujące moduły:
+Projekt został przebudowany do architektury produkcyjnej. Najważniejsze moduły:
 
-*   `network_topology.py` - generowanie topologii sieci w postaci grafu
-*   `config.py` - konfiguracja parametrów symulacji
-*   `data_generator.py` - generowanie syntetycznych danych pomiarowych
-*   `anomaly_simulator.py` - symulacja anomalii (wycieków i błędów liczników)
-*   `visualizer.py` - wizualizacja danych i statystyk
-*   `simulator.py` - główny koordynator symulacji
+*   `network_topology.py` – konfigurowalne topologie z wieloma źródłami i długościami krawędzi.
+*   `config.py` – dataclass z parametrami symulacji, bezpieczeństwa i streamingu.
+*   `data_generator.py` – silnik przepływów per węzeł i krawędź z możliwością streamingu 1 Hz.
+*   `anomaly_simulator.py` – wycieki stałe/narastające oraz błędy liczników z propagacją po grafie.
+*   `simulator.py` – orkiestracja batchowa (setup → run → save → visualize → report).
+*   `streaming/streaming_simulator.py` – warstwa czasu rzeczywistego + zapis do Timescale/CSV.
+*   `api/server.py` – REST + WebSocket (FastAPI, JWT) dla danych na żywo.
+*   `dashboard/app.py` – interaktywny dashboard Dash/Plotly.
+*   `monitoring/metrics.py` – eksport metryk Prometheus.
 
 ## Uruchomienie
 
@@ -78,6 +81,22 @@ python main.py
 3. Uruchomienie przykładów:
 ```bash
 python examples.py [numer_przykładu]
+```
+
+## Streaming i API
+
+```bash
+uvicorn project.api.server:app --host 0.0.0.0 --port 8080
+```
+
+* `/status` – aktualny raport symulacji (wymaga JWT tylko gdy ustawiono `auth_public_key`).
+* `/snapshot` – ostatnie próbki (`limit` parametr) z bufora strumieniowego.
+* `ws://<host>:8080/ws/stream` – WebSocket push kolejnych próbek (1 Hz).
+
+Dashboard (Plotly Dash) pobiera dane z API lub plików zapasowych:
+
+```bash
+python -m project.dashboard.app
 ```
 
 Szczegółowa dokumentacja znajduje się w pliku `USAGE.md`.

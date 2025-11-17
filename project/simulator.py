@@ -33,6 +33,7 @@ class FlowSimulator:
         self.anomaly_simulator = None
         self.visualizer = None
         self.time_series = None
+        self.edge_series = None
         self.anomalies = None
         
         # Create output directory
@@ -43,15 +44,13 @@ class FlowSimulator:
         print("Setting up simulation...")
         
         # Create network topology
-        self.topology = NetworkTopology(
-            num_nodes=self.config.num_nodes,
-            num_sources=self.config.num_sources
-        )
+        self.topology = NetworkTopology(self.config)
         print(f"Network topology created: {self.topology.get_topology_info()}")
         
         # Initialize components
-        self.data_generator = FlowDataGenerator(self.config)
+        self.data_generator = FlowDataGenerator(self.config, self.topology)
         self.anomaly_simulator = AnomalySimulator(self.config)
+        self.anomaly_simulator.attach_topology(self.topology.graph)
         self.visualizer = FlowVisualizer(self.config.output_dir)
         
         print("Setup completed.")
@@ -65,19 +64,22 @@ class FlowSimulator:
         # Get consumer nodes
         consumer_nodes = self.topology.get_consumers()
         
-        # Generate time series for all nodes
-        self.time_series = self.data_generator.generate_time_series(consumer_nodes)
-        print(f"Generated {len(self.time_series)} time series")
+        # Generate time series for all nodes and edges
+        self.time_series, self.edge_series = self.data_generator.generate_time_series(self.topology)
+        print(f"Generated {len(self.time_series)} node series and {len(self.edge_series)} edge series")
         
         print("\nGenerating anomalies...")
         # Generate anomalies
-        edge_ids = [self.topology.get_edge_id(src, tgt) for src, tgt in self.topology.get_edges()]
-        self.anomalies = self.anomaly_simulator.generate_anomalies(consumer_nodes, edge_ids)
+        edge_catalog = {
+            self.topology.get_edge_id(src, tgt): (src, tgt)
+            for src, tgt in self.topology.get_edges()
+        }
+        self.anomalies = self.anomaly_simulator.generate_anomalies(consumer_nodes, edge_catalog)
         print(f"Generated {len(self.anomalies)} anomalies")
         
         # Apply anomalies to time series
-        self.time_series = self.anomaly_simulator.apply_anomalies(self.time_series)
-        print("Anomalies applied to data")
+        self.time_series = self.anomaly_simulator.apply_anomalies(self.time_series, self.edge_series)
+        print("Anomalies applied to nodes and edges")
         
         print("\nSimulation completed.")
     
@@ -88,6 +90,8 @@ class FlowSimulator:
         # Combine all time series
         all_data = pd.concat(self.time_series.values(), ignore_index=True)
         all_data = all_data.sort_values(['timestamp', 'node_id'])
+        edge_data = pd.concat(self.edge_series.values(), ignore_index=True)
+        edge_data = edge_data.sort_values(['timestamp', 'edge_id'])
         
         # Save flow measurements
         if self.config.export_format == 'csv':
@@ -98,6 +102,13 @@ class FlowSimulator:
             flow_path = os.path.join(self.config.output_dir, 'flow_measurements.json')
             all_data.to_json(flow_path, orient='records', date_format='iso')
             print(f"Flow data saved to {flow_path}")
+        # Save edge flows
+        edge_path = os.path.join(self.config.output_dir, f"edge_flows.{self.config.export_format}")
+        if self.config.export_format == 'csv':
+            edge_data.to_csv(edge_path, index=False)
+        else:
+            edge_data.to_json(edge_path, orient='records', date_format='iso')
+        print(f"Edge flow data saved to {edge_path}")
         
         # Save anomaly report (always save, even if empty)
         anomaly_df = self.anomaly_simulator.get_anomaly_report()
@@ -107,9 +118,28 @@ class FlowSimulator:
         
         # Save topology information
         topology_info = self.topology.get_topology_info()
+        topology_payload = {
+            'metadata': topology_info,
+            'nodes': [
+                {
+                    'id': node,
+                    'type': self.topology.get_node_type(node)
+                }
+                for node in self.topology.get_nodes()
+            ],
+            'edges': [
+                {
+                    'id': self.topology.get_edge_id(src, tgt),
+                    'source': src,
+                    'target': tgt,
+                    'length': self.topology.graph.edges[src, tgt].get('length')
+                }
+                for src, tgt in self.topology.get_edges()
+            ]
+        }
         topology_path = os.path.join(self.config.output_dir, 'topology_info.json')
         with open(topology_path, 'w') as f:
-            json.dump(topology_info, f, indent=2)
+            json.dump(topology_payload, f, indent=2)
         print(f"Topology info saved to {topology_path}")
     
     def visualize(self):
@@ -118,9 +148,10 @@ class FlowSimulator:
         
         # Combine all time series for visualization
         all_data = pd.concat(self.time_series.values(), ignore_index=True)
+        edge_data = pd.concat(self.edge_series.values(), ignore_index=True)
         
         # Plot sample of nodes
-        sample_nodes = list(self.time_series.keys())[:5]
+        sample_nodes = self.topology.get_consumers()[:5]
         self.visualizer.plot_node_flows(all_data, sample_nodes)
         print("Flow plot created")
         
@@ -137,7 +168,7 @@ class FlowSimulator:
             print("No anomalies to plot")
         
         # Create force-directed graph visualization
-        self.visualizer.plot_force_directed_graph(self.topology.graph, all_data)
+        self.visualizer.plot_force_directed_graph(self.topology.graph, all_data, edge_data)
         print("Force-directed graph visualization created")
         
         print(f"Visualizations saved to {self.config.output_dir}")
@@ -150,6 +181,7 @@ class FlowSimulator:
             Dictionary with simulation statistics
         """
         all_data = pd.concat(self.time_series.values(), ignore_index=True)
+        edge_data = pd.concat(self.edge_series.values(), ignore_index=True)
         
         report = {
             'simulation_info': {
@@ -166,6 +198,13 @@ class FlowSimulator:
                 'min_flow': float(all_data['flow'].min()),
                 'max_flow': float(all_data['flow'].max()),
                 'total_measurements': len(all_data)
+            },
+            'edge_statistics': {
+                'mean_flow': float(edge_data['flow'].mean()),
+                'std_flow': float(edge_data['flow'].std()),
+                'min_flow': float(edge_data['flow'].min()),
+                'max_flow': float(edge_data['flow'].max()),
+                'total_measurements': len(edge_data)
             },
             'anomaly_statistics': {
                 'total_anomalies': len(self.anomalies),
@@ -207,6 +246,11 @@ class FlowSimulator:
         print(f"  Std deviation: {report['flow_statistics']['std_flow']:.2f} m³/h")
         print(f"  Min flow: {report['flow_statistics']['min_flow']:.2f} m³/h")
         print(f"  Max flow: {report['flow_statistics']['max_flow']:.2f} m³/h")
+        print("\nEdge Flow Statistics:")
+        print(f"  Mean flow: {report['edge_statistics']['mean_flow']:.2f} m³/h")
+        print(f"  Std deviation: {report['edge_statistics']['std_flow']:.2f} m³/h")
+        print(f"  Min flow: {report['edge_statistics']['min_flow']:.2f} m³/h")
+        print(f"  Max flow: {report['edge_statistics']['max_flow']:.2f} m³/h")
         
         print("\nAnomaly Statistics:")
         print(f"  Total anomalies: {report['anomaly_statistics']['total_anomalies']}")

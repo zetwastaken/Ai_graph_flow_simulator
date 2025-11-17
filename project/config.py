@@ -2,8 +2,9 @@
 Configuration module for simulation parameters.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from typing import List, Optional, Tuple
 
 
 @dataclass
@@ -14,6 +15,9 @@ class SimulationConfig:
     # Network topology
     num_nodes: int = 20
     num_sources: int = 1
+    topology_type: str = "tree"  # tree, mesh, random
+    edge_length_range: Tuple[float, float] = (5.0, 25.0)
+    source_nodes: Optional[List[str]] = None
     
     # Time parameters
     start_time: datetime = None
@@ -27,17 +31,30 @@ class SimulationConfig:
     
     # Anomaly parameters
     anomaly_probability: float = 0.1  # Probability of anomaly occurrence
+    progressive_leak_probability: float = 0.25
     leak_magnitude_range: tuple = (5.0, 15.0)  # Flow loss in m³/h
     meter_error_range: tuple = (-5.0, 5.0)  # Meter offset in m³/h
     
     # Output
     output_dir: str = "output"
     export_format: str = "csv"  # csv or json
+    real_time_mode: bool = False
+    stream_buffer_size: int = 2048
+    database_url: Optional[str] = None  # Timescale/Influx connection string
+    auth_public_key: Optional[str] = None  # JWT verification key
+    jwt_audience: Optional[str] = None
+    dashboard_enabled: bool = True
+    websocket_host: str = "0.0.0.0"
+    websocket_port: int = 8080
     
     def __post_init__(self):
         """Initialize default values after dataclass initialization."""
         if self.start_time is None:
             self.start_time = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        if not self.source_nodes:
+            self.source_nodes = [f"source_{idx+1:02d}" for idx in range(self.num_sources)]
+        else:
+            self.num_sources = len(self.source_nodes)
     
     @property
     def end_time(self) -> datetime:

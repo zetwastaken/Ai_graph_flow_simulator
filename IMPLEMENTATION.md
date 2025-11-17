@@ -30,14 +30,9 @@ This is a complete implementation of the AI Graph Flow Simulator as described in
 
 ### 4. Anomaly Simulation ✓
 - **Module**: `anomaly_simulator.py`
-- Two types of anomalies:
-  - **Leaks**: Flow loss on edges (constant magnitude)
-  - **Meter Errors**: Measurement errors on nodes
-    - Add: constant offset
-    - Multiply: multiplicative factor
-    - Drift: linear increase over time
-- Random occurrence based on probability
-- Random duration and timing
+- Wycieki z propagacją po całym podgrafie (tryb stały i narastający)
+- Błędy liczników (add/mul/drift) z flagą per pomiar
+- Integracja z topologią oraz słownikiem krawędzi
 
 ### 5. Data Persistence ✓
 - Saves to CSV or JSON format
@@ -46,12 +41,9 @@ This is a complete implementation of the AI Graph Flow Simulator as described in
 - Topology information
 - Simulation metadata
 
-### 6. Visualization ✓
-- **Module**: `visualizer.py`
-- Flow time series plots with anomaly highlighting
-- Statistical analysis by node (mean, std, min, max)
-- Anomaly distribution (type and magnitude)
-- High-quality PNG exports
+### 6. Visualization & Dashboard ✓
+- **Module**: `visualizer.py` – klasyczne wykresy PNG (przepływy, statystyki, anomalie, graf)
+- **Module**: `dashboard/app.py` – Dash/Plotly + Cytoscape z filtrowaniem i auto-odświeżaniem
 
 ### 7. Simulation Reports ✓
 - JSON format comprehensive reports
@@ -61,11 +53,11 @@ This is a complete implementation of the AI Graph Flow Simulator as described in
 - Anomaly statistics
 - Console summary output
 
-### 8. Main Orchestrator ✓
-- **Module**: `simulator.py`
-- Coordinates all components
-- Workflow: setup → run → save → visualize → report
-- Programmatic API access
+### 8. Streaming & API ✓
+- `streaming/streaming_simulator.py` – generator 1 Hz + zapis Timescale/CSV + Prometheus
+- `api/server.py` – FastAPI REST/WebSocket, JWT auth, dostęp do bufora strumieniowego
+- `monitoring/metrics.py` – metryki `stream_samples_total`
+- `tests/load_tests.py` – scenariusz Locust
 
 ## Project Structure
 
