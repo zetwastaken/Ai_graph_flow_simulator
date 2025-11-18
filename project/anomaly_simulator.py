@@ -49,10 +49,22 @@ class AnomalySimulator:
         """
         self.edge_catalog = edge_catalog
         anomalies = []
+        anomaly_types = []
+        if self.config.enable_leaks:
+            anomaly_types.append('leak')
+        if self.config.enable_meter_errors:
+            anomaly_types.append('meter_error')
+        if not anomaly_types:
+            self.anomalies = []
+            return []
         
+        severity = max(0.1, self.config.anomaly_severity)
+        leak_range = tuple(val * severity for val in self.config.leak_magnitude_range)
+        meter_range = tuple(val * severity for val in self.config.meter_error_range)
         # Calculate number of anomalies to generate
         total_duration_minutes = self.config.duration_hours * 60
-        num_anomalies = int(total_duration_minutes * self.config.anomaly_probability / 60)
+        num_anomalies = int(total_duration_minutes * self.config.anomaly_probability *
+                            self.config.anomaly_rate_multiplier / 60)
         
         for i in range(num_anomalies):
             # Random start time
@@ -62,12 +74,12 @@ class AnomalySimulator:
             # Random duration (10 to 120 minutes)
             duration_minutes = np.random.randint(10, 120)
             
-            # Random anomaly type
-            anomaly_type = np.random.choice(['leak', 'meter_error'])
+            # Random anomaly type constrained by config
+            anomaly_type = np.random.choice(anomaly_types)
             
             if anomaly_type == 'leak':
                 target_edge = np.random.choice(list(edge_catalog.keys()))
-                magnitude = np.random.uniform(*self.config.leak_magnitude_range)
+                magnitude = np.random.uniform(*leak_range)
                 progressive = np.random.rand() < self.config.progressive_leak_probability
                 anomaly = {
                     'id': f'anom_{i+1:03d}',
@@ -82,12 +94,13 @@ class AnomalySimulator:
             else:
                 # Meter error on a node
                 target_node = np.random.choice(node_ids)
-                magnitude = np.random.uniform(*self.config.meter_error_range)
+                magnitude = np.random.uniform(*meter_range)
                 mode = np.random.choice(['add', 'mul', 'drift'])
                 
                 # Adjust magnitude for multiplicative errors
                 if mode == 'mul':
-                    magnitude = np.random.uniform(0.8, 1.2)
+                    factor = np.random.uniform(0.8, 1.2)
+                    magnitude = 1 + (factor - 1) * severity
                 
                 anomaly = {
                     'id': f'anom_{i+1:03d}',

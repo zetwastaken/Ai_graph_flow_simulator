@@ -24,6 +24,26 @@ This will:
 - Generate visualization plots
 - Create a summary report
 
+### CLI Arguments
+
+View all available options:
+```bash
+python main.py --help
+```
+
+Run with custom parameters:
+```bash
+python main.py --nodes 50 --topology mesh --duration 48 --anomaly-prob 0.15
+```
+
+Example with advanced settings:
+```bash
+python main.py --nodes 60 --sources 3 --topology grid \
+    --duration 48 --sampling 0.2 \
+    --anomaly-prob 0.15 --anomaly-rate-multiplier 4 \
+    --anomaly-severity 2.5 --export json
+```
+
 ## Output Files
 
 The simulator generates the following files in the `output/` directory:
@@ -37,9 +57,39 @@ The simulator generates the following files in the `output/` directory:
 - `anomaly_distribution.png` - Anomaly type and magnitude distribution
 - `force_directed_graph.png` - **NEW**: Force-directed graph visualization of network topology
 
-## Custom Configuration
+## CLI Parameters
 
-You can customize the simulation by modifying the configuration in `main.py`:
+### Topology Configuration
+- `--nodes N` - Number of nodes in the network (default: 20)
+- `--sources N` - Number of source nodes (default: 1)
+- `--topology TYPE` - Network topology type: tree, mesh, random, radial, grid (default: tree)
+
+### Time Configuration
+- `--duration N` - Simulation duration in hours (default: 24)
+- `--sampling F` - Sampling frequency in Hz (default: 0.1)
+- `--start-time ISO` - Start time in ISO format (default: today at midnight)
+
+### Flow Configuration
+- `--base-flow F` - Base flow rate in m³/h (default: 100.0)
+- `--flow-variation F` - Flow variation as a fraction (default: 0.2 = 20%)
+- `--noise-std F` - Standard deviation of measurement noise (default: 2.0)
+
+### Anomaly Configuration
+- `--anomaly-prob F` - Probability of anomaly occurrence (default: 0.1)
+- `--anomaly-rate-multiplier F` - Scale the number of anomalies (default: 1.0)
+- `--anomaly-severity F` - Scale anomaly magnitude/severity (default: 1.0)
+- `--progressive-leak-prob F` - Probability that a leak is progressive (default: 0.25)
+- `--disable-leaks` - Disable leak anomalies
+- `--disable-meter-errors` - Disable meter error anomalies
+
+### Output Configuration
+- `--output DIR` - Output directory path (default: output)
+- `--export FORMAT` - Export format: csv or json (default: csv)
+- `--no-visualize` - Skip generating visualization plots
+
+## Programmatic Usage
+
+You can also use the simulator programmatically in your Python code:
 
 ```python
 from project import FlowSimulator, SimulationConfig
@@ -48,6 +98,7 @@ from datetime import datetime
 config = SimulationConfig(
     num_nodes=50,                    # Number of consumer nodes
     num_sources=1,                   # Number of supply sources
+    topology_type="mesh",            # Topology type
     duration_hours=48,               # Simulation duration
     sampling_frequency_hz=1.0,       # Sampling rate (Hz)
     base_flow_rate=100.0,           # Base flow in m³/h

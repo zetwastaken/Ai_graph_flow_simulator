@@ -87,11 +87,8 @@ class FlowSimulator:
         """Save simulation data to files."""
         print("\nSaving data...")
         
-        # Combine all time series
-        all_data = pd.concat(self.time_series.values(), ignore_index=True)
-        all_data = all_data.sort_values(['timestamp', 'node_id'])
-        edge_data = pd.concat(self.edge_series.values(), ignore_index=True)
-        edge_data = edge_data.sort_values(['timestamp', 'edge_id'])
+        all_data = self.get_node_dataframe()
+        edge_data = self.get_edge_dataframe()
         
         # Save flow measurements
         if self.config.export_format == 'csv':
@@ -146,9 +143,8 @@ class FlowSimulator:
         """Create visualizations of the simulation data."""
         print("\nCreating visualizations...")
         
-        # Combine all time series for visualization
-        all_data = pd.concat(self.time_series.values(), ignore_index=True)
-        edge_data = pd.concat(self.edge_series.values(), ignore_index=True)
+        all_data = self.get_node_dataframe()
+        edge_data = self.get_edge_dataframe()
         
         # Plot sample of nodes
         sample_nodes = self.topology.get_consumers()[:5]
@@ -180,8 +176,8 @@ class FlowSimulator:
         Returns:
             Dictionary with simulation statistics
         """
-        all_data = pd.concat(self.time_series.values(), ignore_index=True)
-        edge_data = pd.concat(self.edge_series.values(), ignore_index=True)
+        all_data = self.get_node_dataframe()
+        edge_data = self.get_edge_dataframe()
         
         report = {
             'simulation_info': {
@@ -222,6 +218,23 @@ class FlowSimulator:
         print(f"\nSimulation report saved to {report_path}")
         
         return report
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+    def get_node_dataframe(self) -> pd.DataFrame:
+        if not self.time_series:
+            raise ValueError("No node time series available. Run the simulation first.")
+        all_data = pd.concat(self.time_series.values(), ignore_index=True)
+        all_data = all_data.sort_values(['timestamp', 'node_id'])
+        return all_data
+
+    def get_edge_dataframe(self) -> pd.DataFrame:
+        if not self.edge_series:
+            raise ValueError("No edge time series available. Run the simulation first.")
+        edge_data = pd.concat(self.edge_series.values(), ignore_index=True)
+        edge_data = edge_data.sort_values(['timestamp', 'edge_id'])
+        return edge_data
     
     def print_summary(self):
         """Print a summary of the simulation."""

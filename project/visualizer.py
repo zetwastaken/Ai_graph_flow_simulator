@@ -3,6 +3,10 @@ Visualization module for flow data.
 Creates plots and charts for flow analysis.
 """
 
+import matplotlib
+
+# Force headless backend so plotting works in background threads / servers
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import pandas as pd
 import networkx as nx

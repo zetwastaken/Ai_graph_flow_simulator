@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import random
 from typing import Dict, List, Tuple
 
@@ -66,6 +67,8 @@ class NetworkTopology:
             "tree": self._build_tree_topology,
             "mesh": self._build_mesh_topology,
             "random": self._build_random_topology,
+            "radial": self._build_radial_topology,
+            "grid": self._build_grid_topology,
         }
         builders.get(self.config.topology_type, self._build_tree_topology)()
 
@@ -133,3 +136,76 @@ class NetworkTopology:
             src, dst = sorted(random.sample(consumers, 2))
             if src != dst:
                 self._add_edge(src, dst)
+
+    def _build_radial_topology(self):
+        self.graph.clear()
+        sources = list(self.config.source_nodes)
+        for source in sources:
+            self._register_node(source, "source")
+
+        hub_count = max(len(sources) * 2, 4)
+        hubs = [f"ring_{idx+1:02d}" for idx in range(hub_count)]
+        for hub in hubs:
+            self._register_node(hub, "hub")
+        for idx, hub in enumerate(hubs):
+            source = sources[idx % len(sources)]
+            self._add_edge(source, hub)
+
+        consumers = [f"c{idx+1:03d}" for idx in range(self.config.num_nodes)]
+        node_iter = iter(consumers)
+        remaining = list(consumers)
+        for hub in hubs:
+            for _ in range(max(1, self.config.num_nodes // hub_count)):
+                if not remaining:
+                    break
+                consumer = remaining.pop(0)
+                self._register_node(consumer, "consumer", demand=10.0)
+                self._add_edge(hub, consumer)
+        for consumer in remaining:
+            hub = random.choice(hubs)
+            self._register_node(consumer, "consumer", demand=10.0)
+            self._add_edge(hub, consumer)
+
+        # Connect hubs in ring for redundancy
+        for idx, hub in enumerate(hubs):
+            nxt = hubs[(idx + 1) % len(hubs)]
+            self._add_edge(hub, nxt)
+
+    def _build_grid_topology(self):
+        self.graph.clear()
+        sources = list(self.config.source_nodes)
+        for source in sources:
+            self._register_node(source, "source")
+
+        grid_size = max(2, math.ceil(math.sqrt(self.config.num_nodes)))
+        consumers: List[str] = []
+        for r in range(grid_size):
+            for c in range(grid_size):
+                if len(consumers) >= self.config.num_nodes:
+                    break
+                node_id = f"g{r:02d}_{c:02d}"
+                consumers.append(node_id)
+                self._register_node(node_id, "consumer", demand=10.0)
+            if len(consumers) >= self.config.num_nodes:
+                break
+
+        # Connect grid neighbors (right and down) to form mesh
+        for r in range(grid_size):
+            for c in range(grid_size):
+                node_id = f"g{r:02d}_{c:02d}"
+                if node_id not in consumers:
+                    continue
+                if c + 1 < grid_size:
+                    neighbor = f"g{r:02d}_{c+1:02d}"
+                    if neighbor in consumers:
+                        self._add_edge(node_id, neighbor)
+                if r + 1 < grid_size:
+                    neighbor = f"g{r+1:02d}_{c:02d}"
+                    if neighbor in consumers:
+                        self._add_edge(node_id, neighbor)
+
+        # Attach sources evenly across top row
+        top_row = [f"g00_{c:02d}" for c in range(grid_size) if f"g00_{c:02d}" in consumers]
+        for idx, node in enumerate(top_row):
+            source = sources[idx % len(sources)]
+            self._add_edge(source, node)

@@ -8,7 +8,7 @@ System będzie umożliwiał:
 *   tworzenie wirtualnej topologii sieci przesyłowej w postaci grafu (drzewo/siatka/losowa),
 *   generowanie syntetycznych szeregów czasowych przepływów wraz z przepływami na krawędziach,
 *   dodawanie szumu pomiarowego oraz symulowanie anomalii (wycieki stałe/narastające, błędy liczników),
-*   zapisywanie, strumieniowanie (REST/WebSocket) i wizualizację danych w czasie rzeczywistym.
+*   zapisywanie i wizualizację danych pomiarowych.
 
 Projekt wykorzystuje język Python oraz zestaw narzędzi do analizy danych i symulacji.
 
@@ -57,14 +57,11 @@ Projekt wykorzystuje język Python oraz zestaw narzędzi do analizy danych i sym
 Projekt został przebudowany do architektury produkcyjnej. Najważniejsze moduły:
 
 *   `network_topology.py` – konfigurowalne topologie z wieloma źródłami i długościami krawędzi.
-*   `config.py` – dataclass z parametrami symulacji, bezpieczeństwa i streamingu.
-*   `data_generator.py` – silnik przepływów per węzeł i krawędź z możliwością streamingu 1 Hz.
+*   `config.py` – dataclass z parametrami symulacji.
+*   `data_generator.py` – silnik przepływów per węzeł i krawędź.
 *   `anomaly_simulator.py` – wycieki stałe/narastające oraz błędy liczników z propagacją po grafie.
 *   `simulator.py` – orkiestracja batchowa (setup → run → save → visualize → report).
-*   `streaming/streaming_simulator.py` – warstwa czasu rzeczywistego + zapis do Timescale/CSV.
-*   `api/server.py` – REST + WebSocket (FastAPI, JWT) dla danych na żywo.
-*   `dashboard/app.py` – interaktywny dashboard Dash/Plotly.
-*   `monitoring/metrics.py` – eksport metryk Prometheus.
+*   `visualizer.py` – generowanie wykresów statycznych (matplotlib) oraz wizualizacji grafu sieci.
 
 ## Uruchomienie
 
@@ -97,6 +94,19 @@ Dashboard (Plotly Dash) pobiera dane z API lub plików zapasowych:
 
 ```bash
 python -m project.dashboard.app
+```
+
+Dashboard pozwala:
+* przełączać topologię (tree/mesh/random/radial/grid), ustawiać liczbę źródeł i generować nowe dane,
+* wybierać rodzaj aktywnych anomalii (wycieki, błędy liczników), gęstość występowania, współczynnik burst oraz intensywność przy pomocy suwaków,
+* zmieniać layout grafu oraz filtrować węzły na wykresie czasowym (wykres zawsze pokazuje ostatnie 24h).
+
+Przykładowe uruchomienie pełnego stacku z intensywnymi anomaliami i topologią siatkową:
+
+```bash
+python run_system.py --nodes 60 --sources 3 --topology grid --duration 48 \
+    --sampling 0.2 --anomaly-prob 0.15 --anomaly-rate-multiplier 4 \
+    --anomaly-severity 2.5
 ```
 
 Szczegółowa dokumentacja znajduje się w pliku `USAGE.md`.
