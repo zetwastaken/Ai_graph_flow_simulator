@@ -11,7 +11,7 @@ from project import FlowSimulator, SimulationConfig
 
 def main():
     """Run the flow simulator with CLI argument support."""
-    
+
     parser = argparse.ArgumentParser(
         description="AI Graph Flow Simulator - CLI Mode",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -22,7 +22,7 @@ Examples:
   %(prog)s --topology radial --duration 72 --sampling 0.05 --no-visualize
         """
     )
-    
+
     # Topology arguments
     topo_group = parser.add_argument_group('Topology Configuration')
     topo_group.add_argument(
@@ -34,12 +34,12 @@ Examples:
         help="Number of source nodes (default: 1)"
     )
     topo_group.add_argument(
-        "--topology", 
-        choices=["tree", "mesh", "random", "radial", "grid"], 
+        "--topology",
+        choices=["tree", "mesh", "random", "radial", "grid"],
         default="tree",
         help="Network topology type (default: tree)"
     )
-    
+
     # Time arguments
     time_group = parser.add_argument_group('Time Configuration')
     time_group.add_argument(
@@ -54,7 +54,7 @@ Examples:
         "--start-time", type=str, default=None,
         help="Start time in ISO format (default: today at midnight)"
     )
-    
+
     # Flow arguments
     flow_group = parser.add_argument_group('Flow Configuration')
     flow_group.add_argument(
@@ -69,7 +69,7 @@ Examples:
         "--noise-std", type=float, default=2.0,
         help="Standard deviation of measurement noise (default: 2.0)"
     )
-    
+
     # Anomaly arguments
     anomaly_group = parser.add_argument_group('Anomaly Configuration')
     anomaly_group.add_argument(
@@ -96,7 +96,7 @@ Examples:
         "--progressive-leak-prob", type=float, default=0.25,
         help="Probability that a leak is progressive rather than constant (default: 0.25)"
     )
-    
+
     # Output arguments
     output_group = parser.add_argument_group('Output Configuration')
     output_group.add_argument(
@@ -104,8 +104,8 @@ Examples:
         help="Output directory path (default: output)"
     )
     output_group.add_argument(
-        "--export", 
-        choices=["csv", "json"], 
+        "--export",
+        choices=["csv", "json"],
         default="csv",
         help="Export format for data files (default: csv)"
     )
@@ -113,9 +113,9 @@ Examples:
         "--no-visualize", action="store_true",
         help="Skip generating visualization plots"
     )
-    
+
     args = parser.parse_args()
-    
+
     # Parse start time if provided
     start_time = None
     if args.start_time:
@@ -127,7 +127,7 @@ Examples:
             return 1
     else:
         start_time = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    
+
     # Create configuration
     config = SimulationConfig(
         num_nodes=args.nodes,
@@ -148,7 +148,7 @@ Examples:
         output_dir=args.output,
         export_format=args.export,
     )
-    
+
     print("AI Graph Flow Simulator - CLI Mode")
     print("=" * 60)
     print(f"Configuration:")
@@ -160,31 +160,31 @@ Examples:
     print(f"  Output: {args.output}/ ({args.export} format)")
     print("=" * 60)
     print()
-    
+
     # Create and run simulator
     simulator = FlowSimulator(config)
-    
+
     # Setup the simulation
     print("Setting up simulation...")
     simulator.setup()
-    
+
     # Run the simulation
     print("Running simulation...")
     simulator.run()
-    
+
     # Save results
     print("Saving data...")
     simulator.save_data()
-    
+
     # Create visualizations
     if not args.no_visualize:
         print("Generating visualizations...")
         simulator.visualize()
-    
+
     # Print summary
     print()
     simulator.print_summary()
-    
+
     print(f"\n✓ Simulation complete! Results saved to '{args.output}/' directory.")
     return 0
 

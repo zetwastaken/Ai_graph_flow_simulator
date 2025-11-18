@@ -15,6 +15,12 @@ class NetworkTopology:
     """Create directed network topologies for the simulator."""
 
     def __init__(self, config: SimulationConfig):
+        """
+        Initialize network topology.
+
+        Args:
+            config: Simulation configuration containing topology parameters
+        """
         self.config = config
         self.graph = nx.DiGraph()
         self._create_topology()
@@ -23,21 +29,64 @@ class NetworkTopology:
     # Public helpers
     # ------------------------------------------------------------------
     def get_nodes(self) -> List[str]:
+        """
+        Get all node IDs in the network.
+
+        Returns:
+            List of node identifiers
+        """
         return list(self.graph.nodes())
 
     def get_edges(self) -> List[Tuple[str, str]]:
+        """
+        Get all edges in the network.
+
+        Returns:
+            List of (source, target) tuples
+        """
         return list(self.graph.edges())
 
     def get_edge_id(self, source: str, target: str) -> str:
+        """
+        Get the unique identifier for an edge.
+
+        Args:
+            source: Source node ID
+            target: Target node ID
+
+        Returns:
+            Edge identifier string
+        """
         return self.graph.edges[source, target].get("edge_id", f"e_{source}_{target}")
 
     def get_node_type(self, node: str) -> str:
+        """
+        Get the type of a node.
+
+        Args:
+            node: Node identifier
+
+        Returns:
+            Node type (source, hub, consumer, or unknown)
+        """
         return self.graph.nodes[node].get("node_type", "unknown")
 
     def get_consumers(self) -> List[str]:
+        """
+        Get all consumer nodes in the network.
+
+        Returns:
+            List of consumer node identifiers
+        """
         return [n for n in self.graph.nodes() if self.get_node_type(n) == "consumer"]
 
     def get_topology_info(self) -> Dict:
+        """
+        Get summary information about the network topology.
+
+        Returns:
+            Dictionary containing topology statistics
+        """
         return {
             "num_nodes": self.graph.number_of_nodes(),
             "num_edges": self.graph.number_of_edges(),

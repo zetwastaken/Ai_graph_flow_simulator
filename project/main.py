@@ -8,6 +8,12 @@ from . import FlowSimulator, SimulationConfig
 
 
 def run():
+    """
+    Run a default simulation with basic configuration.
+
+    Creates and executes a complete simulation pipeline including setup,
+    data generation, saving, visualization, and reporting.
+    """
     config = SimulationConfig(
         start_time=datetime.now().replace(hour=0, minute=0, second=0, microsecond=0),
     )
