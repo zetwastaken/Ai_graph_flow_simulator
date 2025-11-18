@@ -18,7 +18,7 @@ class FlowDataGenerator:
     """
     Generates synthetic flow measurement data.
     """
-    
+
     def __init__(self, config: SimulationConfig, topology: Optional[NetworkTopology] = None):
         self.config = config
         self.topology = topology
@@ -27,55 +27,55 @@ class FlowDataGenerator:
 
     def attach_topology(self, topology: NetworkTopology):
         self.topology = topology
-    
+
     def generate_base_flow(self, num_samples: int, node_id: str) -> np.ndarray:
         """
         Generate base flow pattern with daily cycles.
-        
+
         Args:
             num_samples: Number of samples to generate
             node_id: Identifier of the node
-            
+
         Returns:
             Array of flow values
         """
         # Create time array
         t = np.arange(num_samples) * self.config.time_step_seconds
-        
+
         # Daily cycle (24-hour period)
         daily_cycle = np.sin(2 * np.pi * t / (24 * 3600))
-        
+
         # Weekly cycle (7-day period) - smaller amplitude
         weekly_cycle = 0.3 * np.sin(2 * np.pi * t / (7 * 24 * 3600))
-        
+
         # Random variation based on node
         node_hash = hash(node_id) % 100
         node_factor = 0.8 + (node_hash / 100) * 0.4  # 0.8 to 1.2
-        
+
         # Combine patterns
         base_flow = self.config.base_flow_rate * node_factor
         variation = self.config.base_flow_rate * self.config.flow_variation
-        
+
         flow = base_flow + variation * (daily_cycle + weekly_cycle)
-        
+
         # Ensure non-negative flows
         flow = np.maximum(flow, 0)
-        
+
         return flow
-    
+
     def add_noise(self, flow: np.ndarray) -> np.ndarray:
         """
         Add measurement noise to flow data.
-        
+
         Args:
             flow: Clean flow values
-            
+
         Returns:
             Noisy flow values
         """
         noise = np.random.normal(0, self.config.noise_std, len(flow))
         return flow + noise
-    
+
     # ------------------------------------------------------------------
     # Batch generation
     # ------------------------------------------------------------------
