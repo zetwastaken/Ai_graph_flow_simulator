@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import time
-from datetime import timedelta
-from typing import Dict, Generator, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import networkx as nx
 import numpy as np
@@ -20,12 +18,25 @@ class FlowDataGenerator:
     """
 
     def __init__(self, config: SimulationConfig, topology: Optional[NetworkTopology] = None):
+        """
+        Initialize the flow data generator.
+
+        Args:
+            config: Simulation configuration
+            topology: Network topology (optional, can be attached later)
+        """
         self.config = config
         self.topology = topology
         if hasattr(self.config, "seed") and self.config.seed is not None:
             np.random.seed(self.config.seed)
 
     def attach_topology(self, topology: NetworkTopology):
+        """
+        Attach a network topology to the generator.
+
+        Args:
+            topology: Network topology instance
+        """
         self.topology = topology
 
     def generate_base_flow(self, num_samples: int, node_id: str) -> np.ndarray:
@@ -183,30 +194,3 @@ class FlowDataGenerator:
         node_series, node_flow_arrays = self._propagate_internal_nodes(consumer_series, time_index)
         edge_series = self._build_edge_series(node_flow_arrays, time_index)
         return node_series, edge_series
-
-    # ------------------------------------------------------------------
-    # Streaming
-    # ------------------------------------------------------------------
-    def stream_time_series(
-        self,
-        topology: Optional[NetworkTopology] = None,
-        real_time: Optional[bool] = None,
-    ) -> Generator[Dict[str, List[Dict]], None, None]:
-        node_series, edge_series = self.generate_time_series(topology)
-        node_ids = list(node_series.keys())
-        edge_ids = list(edge_series.keys())
-        num_samples = self.config.total_samples
-        rt = self.config.real_time_mode if real_time is None else real_time
-        sleep_seconds = self.config.time_step_seconds if rt else 0
-
-        for idx in range(num_samples):
-            timestamp = node_series[node_ids[0]].iloc[idx]["timestamp"]
-            node_payload = [node_series[node].iloc[idx].to_dict() for node in node_ids]
-            edge_payload = [edge_series[edge].iloc[idx].to_dict() for edge in edge_ids]
-            yield {
-                "timestamp": timestamp.to_pydatetime(),
-                "nodes": node_payload,
-                "edges": edge_payload,
-            }
-            if sleep_seconds:
-                time.sleep(sleep_seconds)

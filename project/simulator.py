@@ -223,6 +223,15 @@ class FlowSimulator:
     # Helpers
     # ------------------------------------------------------------------
     def get_node_dataframe(self) -> pd.DataFrame:
+        """
+        Get combined node time series data as a single DataFrame.
+
+        Returns:
+            DataFrame with all node measurements sorted by timestamp
+
+        Raises:
+            ValueError: If no time series data is available
+        """
         if not self.time_series:
             raise ValueError("No node time series available. Run the simulation first.")
         all_data = pd.concat(self.time_series.values(), ignore_index=True)
@@ -230,6 +239,15 @@ class FlowSimulator:
         return all_data
 
     def get_edge_dataframe(self) -> pd.DataFrame:
+        """
+        Get combined edge flow data as a single DataFrame.
+
+        Returns:
+            DataFrame with all edge measurements sorted by timestamp
+
+        Raises:
+            ValueError: If no edge series data is available
+        """
         if not self.edge_series:
             raise ValueError("No edge time series available. Run the simulation first.")
         edge_data = pd.concat(self.edge_series.values(), ignore_index=True)
