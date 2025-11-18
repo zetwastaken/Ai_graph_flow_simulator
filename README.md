@@ -54,14 +54,51 @@ Projekt wykorzystuje język Python oraz zestaw narzędzi do analizy danych i sym
 
 # Implementacja
 
-Projekt został przebudowany do architektury produkcyjnej. Najważniejsze moduły:
+Projekt został przebudowany do architektury produkcyjnej z modułową strukturą.
 
-*   `network_topology.py` – konfigurowalne topologie z wieloma źródłami i długościami krawędzi.
-*   `config.py` – dataclass z parametrami symulacji.
-*   `data_generator.py` – silnik przepływów per węzeł i krawędź.
-*   `anomaly_simulator.py` – wycieki stałe/narastające oraz błędy liczników z propagacją po grafie.
-*   `simulator.py` – orkiestracja batchowa (setup → run → save → visualize → report).
-*   `visualizer.py` – generowanie wykresów statycznych (matplotlib) oraz wizualizacji grafu sieci.
+## Struktura projektu
+
+```
+project/
+├── __init__.py                     # Główny punkt wejścia modułu
+├── config.py                       # Konfiguracja symulacji (SimulationConfig)
+├── simulator.py                    # Orkiestracja symulacji (FlowSimulator)
+│
+├── anomaly_simulator.py           # Wrapper dla anomalii
+├── data_generator.py              # Wrapper dla generatora danych
+├── network_topology.py            # Wrapper dla topologii
+├── visualizer.py                  # Wrapper dla wizualizacji
+│
+├── anomalies/                     # Moduł anomalii
+│   ├── __init__.py
+│   └── anomaly_injector.py        # Implementacja AnomalySimulator
+│
+├── simulation/                    # Moduł symulacji przepływów
+│   ├── __init__.py
+│   └── flow_simulator.py          # Implementacja FlowDataGenerator
+│
+├── topology/                      # Moduł topologii sieci
+│   ├── __init__.py
+│   └── graph_generator.py         # Implementacja NetworkTopology
+│
+├── visualization/                 # Moduł wizualizacji
+│   ├── __init__.py
+│   └── plotter.py                 # Implementacja FlowVisualizer
+│
+└── utils/                         # Narzędzia pomocnicze
+    ├── __init__.py
+    └── data_saver.py              # Zapis danych do CSV/JSON
+```
+
+## Główne komponenty
+
+*   **config.py** – dataclass z parametrami symulacji
+*   **simulator.py** – orkiestracja batchowa (setup → run → save → visualize → report)
+*   **topology/** – konfigurowalne topologie z wieloma źródłami i długościami krawędzi
+*   **simulation/** – silnik przepływów per węzeł i krawędź
+*   **anomalies/** – wycieki stałe/narastające oraz błędy liczników z propagacją po grafie
+*   **visualization/** – generowanie wykresów statycznych (matplotlib) oraz wizualizacji grafu sieci
+*   **utils/** – zapis danych do plików CSV/JSON
 
 ## Uruchomienie
 
