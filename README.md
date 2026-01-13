@@ -2,13 +2,13 @@
 
 Celem projektu jest zaprojektowanie i implementacja systemu symulującego dane pomiarowe w sieciach przesyłowych (np. wodociągowych lub gazowych) w celu analizy bilansu przepływów w czasie rzeczywistym. System ma na celu odtworzenie realistycznego zachowania sieci, w tym występowania losowych zakłóceń pomiarowych i anomalii, takich jak wycieki lub błędy liczników.
 
-Projekt stanowi etap przygotowawczy do budowy pełnego systemu detekcji anomalii – w niniejszej wersji skupia się wyłącznie na generowaniu i wizualizacji danych symulacyjnych.
+Projekt stanowi etap przygotowawczy do budowy pełnego systemu detekcji anomalii – w niniejszej wersji skupia się wyłącznie na generowaniu i wizualizacji danych symulacyjnych uruchamianych z poziomu CLI.
 
-System będzie umożliwiał:
+System w obecnej wersji umożliwia:
 *   tworzenie wirtualnej topologii sieci przesyłowej w postaci grafu (drzewo/siatka/losowa),
 *   generowanie syntetycznych szeregów czasowych przepływów wraz z przepływami na krawędziach,
 *   dodawanie szumu pomiarowego oraz symulowanie anomalii (wycieki stałe/narastające, błędy liczników),
-*   zapisywanie i wizualizację danych pomiarowych.
+*   zapisywanie danych pomiarowych oraz statyczną wizualizację wyników.
 
 Projekt wykorzystuje język Python oraz zestaw narzędzi do analizy danych i symulacji.
 
@@ -34,7 +34,7 @@ Projekt wykorzystuje język Python oraz zestaw narzędzi do analizy danych i sym
     Wszystkie dane pomiarowe wraz z metadanymi (czas, identyfikator punktu, typ anomalii) są zapisywane jako csv.
 
 *   **Wizualizacja wyników**
-    Dane są prezentowane w środowisku wizualnym w postaci wykresów przepływów w czasie, z możliwością filtrowania według punktu pomiarowego i zakresu czasowego.
+    Po zakończeniu symulacji generowane są statyczne wykresy (matplotlib) zapisywane jako pliki PNG: serie czasowe z zaznaczonymi anomaliami, statystyki przepływów, rozkład anomalii oraz graf siły przedstawiający topologię.
 
 *   **Eksport danych**
     System umożliwia eksport wyników symulacji do formatu CSV lub JSON w celu dalszej analizy zewnętrznej.
@@ -43,6 +43,7 @@ Projekt wykorzystuje język Python oraz zestaw narzędzi do analizy danych i sym
     Po zakończeniu symulacji generowany jest raport zawierający podstawowe statystyki, takie jak średni przepływ, odchylenie standardowe, liczba i rodzaj wprowadzonych anomalii.
 
 ## Ograniczenia projektu
+*   Wersja nie zawiera serwera API ani interaktywnego dashboardu – interakcja odbywa się wyłącznie przez CLI i pliki wyjściowe.
 *   Projekt nie obejmuje implementacji algorytmów detekcji anomalii.
 *   Dane są generowane w sposób syntetyczny i nie pochodzą z rzeczywistych urządzeń pomiarowych.
 *   System nie realizuje jeszcze logiki wnioskowania (np. klasyfikacji typu awarii).
@@ -112,48 +113,32 @@ pip install -r requirements.txt
 python main.py
 ```
 
-3. Uruchomienie przykładów:
+3. Podgląd wszystkich opcji CLI:
+```bash
+python main.py --help
+```
+
+4. Uruchomienie przykładów z gotowymi konfiguracjami:
 ```bash
 python examples.py [numer_przykładu]
 ```
 
-## Streaming i API
+## Tryb działania
 
-```bash
-uvicorn project.api.server:app --host 0.0.0.0 --port 8080
-```
+Repozytorium udostępnia wyłącznie tryb wsadowy sterowany parametrami CLI. Typowy przebieg obejmuje:
+1. Budowę topologii grafu (`FlowSimulator.setup`), w tym rozmieszczenie źródeł, węzłów pośrednich i odbiorców.
+2. Generowanie przebiegów czasowych na węzłach i krawędziach wraz z szumem pomiarowym.
+3. Opcjonalne wstrzyknięcie anomalii (wycieki, błędy liczników) zgodnie z parametrami.
+4. Zapis danych do `output/` w formacie CSV lub JSON oraz wygenerowanie wykresów PNG i raportu zbiorczego.
 
-* `/status` – aktualny raport symulacji (wymaga JWT tylko gdy ustawiono `auth_public_key`).
-* `/snapshot` – ostatnie próbki (`limit` parametr) z bufora strumieniowego.
-* `ws://<host>:8080/ws/stream` – WebSocket push kolejnych próbek (1 Hz).
-
-Dashboard (Plotly Dash) pobiera dane z API lub plików zapasowych:
-
-```bash
-python -m project.dashboard.app
-```
-
-Dashboard pozwala:
-* przełączać topologię (tree/mesh/random/radial/grid), ustawiać liczbę źródeł i generować nowe dane,
-* wybierać rodzaj aktywnych anomalii (wycieki, błędy liczników), gęstość występowania, współczynnik burst oraz intensywność przy pomocy suwaków,
-* zmieniać layout grafu oraz filtrować węzły na wykresie czasowym (wykres zawsze pokazuje ostatnie 24h).
-
-Przykładowe uruchomienie pełnego stacku z intensywnymi anomaliami i topologią siatkową:
-
-```bash
-python run_system.py --nodes 60 --sources 3 --topology grid --duration 48 \
-    --sampling 0.2 --anomaly-prob 0.15 --anomaly-rate-multiplier 4 \
-    --anomaly-severity 2.5
-```
-
-Szczegółowa dokumentacja znajduje się w pliku `USAGE.md`.
+Szczegółowy opis parametrów i plików wyjściowych znajduje się w `USAGE.md`.
 
 # Wymagania niefunkcjonalne
-*   **Wydajność** – System powinien generować dane dla minimum 100 punktów pomiarowych z częstotliwością 1 Hz w czasie rzeczywistym.
+*   **Wydajność** – System powinien generować dane dla minimum 100 punktów pomiarowych z częstotliwością 1 Hz w rozsądnym czasie pojedynczego uruchomienia CLI.
 *   **Skalowalność** – Architektura systemu powinna umożliwiać łatwe rozszerzenie liczby węzłów i zwiększenie złożoności topologii sieci.
 *   **Spójność danych** – Dane zapisywane muszą zachowywać bilans przepływów zgodny z topologią sieci (poza przypadkami anomalii).
-*   **Bezpieczeństwo** – Dostęp do bazy danych powinien być chroniony hasłem lub tokenem uwierzytelniającym.
+*   **Bezpieczeństwo** – Dane zapisywane są lokalnie w plikach CSV/JSON, dlatego ważne jest kontrolowanie uprawnień do katalogu `output/`.
 *   **Czytelność kodu** – Kod projektu powinien być modularny i opatrzony komentarzami zgodnymi.
 *   **Przenośność** – System powinien działać w sposób identyczny w różnych środowiskach systemowych.
 *   **Niezależność sieciowa** – Symulacja musi być możliwa do uruchomienia w trybie offline.
-*   **Możliwość wizualizacji** – Dane muszą być dostępne w czasie rzeczywistym, a wykresy powinny umożliwiać interaktywną analizę (powiększanie, wybór zakresu czasowego).
+*   **Możliwość wizualizacji** – Po każdym przebiegu generowane są statyczne wykresy PNG (brak interaktywnego UI).

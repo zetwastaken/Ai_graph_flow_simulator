@@ -44,3 +44,7 @@ output/
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb
+Archiwum.zip
+.DS_Store
+project/.DS_Store
+.DS_Store
